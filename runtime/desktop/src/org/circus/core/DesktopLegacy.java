@@ -179,6 +179,13 @@ public final class DesktopLegacy extends DesktopEngine {
         if(q.binding!=0&&session.vm.variables.read(q.binding>>8,q.binding&255)==0)return;
         if(q.type==2){if(!q.text.isEmpty())text(g,codec.apply(q.text),q.x,q.y,sprite?23:Math.max(22,q.width),sprite?q.flags:q.height,width-q.x);return;}
         if(q.width<=0||q.height<=0)return;
+        // A "restore" blit copies the scene background back over a rectangle where a hover bubble
+        // or label used to sit: D.C.II's alarm clock stores three of them as button sprites with
+        // source == destination (meza_nin_20 40EB/417D/41FB, slot 0 = the background texture). The
+        // native widget paints into the background layer, but this renderer rebuilds the
+        // background every frame, so the copy is a no-op — drawing it over the panel quad that was
+        // laid down before the buttons would punch a background hole through the panel's left edge.
+        if(q.type==0&&q.slot()==1&&q.sx==q.x&&q.sy==q.y)return;
         Composite old=g.getComposite();if(q.opaque())g.setComposite(AlphaComposite.SrcOver.derive(80/255f));
         if(q.type==1){g.setColor(new Color(color(q.flags),true));g.fillRect(q.x,q.y,q.width,q.height);}
         else if(q.type==0){Picture p=picture(slots[q.slot()]);if(p!=null){int sx=q.sx,sy=q.sy;if(q.animation!=0&&q.frames>0&&q.period>0)sx+=(int)(host().scene.effectClock/(34L*q.period)%q.frames)*q.step;int l=Math.max(0,sx),t=Math.max(0,sy),r=Math.min(p.image.getWidth(),sx+q.width),b=Math.min(p.image.getHeight(),sy+q.height);if(l<r&&t<b)g.drawImage(p.image,q.x+l-sx,q.y+t-sy,q.x+r-sx,q.y+b-sy,l,t,r,b,null);}}
