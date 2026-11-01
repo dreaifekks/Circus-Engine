@@ -82,6 +82,20 @@ public final class CoreTests {
         check(resources.audio("assets/sample.pck",pck.entries.get(0).nameBytes).channels==1,"portable archive-backed audio");
         check(resources.archive("assets/sample.crm")==resources.archive("ASSETS/SAMPLE.CRM"),"bounded archive index cache");
         reject(()->resources.read("../outside",10),"portable resource path traversal rejected");
+        check(Binary.nativeResourcePath("BST\\\\SRR_0F1_013_B").equals("BST/SRR_0F1_013_B"),"Windows image paths collapse repeated native separators");
+        check(Binary.nativeResourcePath("VOICE//CHAPTER\\\\LINE").equals("VOICE/CHAPTER/LINE"),"mixed native separators share one canonical relative path");
+        reject(()->Binary.safePath("BST//POSE"),"inventory paths still reject empty components");
+        for(String unsafe:new String[]{"../outside","BST//../outside","BST\\\\.\\POSE","/root//file","\\\\server\\file","C:\\game\\file","https://example/file","BST/POSE/","BST/\0POSE"})reject(()->Binary.nativeResourcePath(unsafe),"native path still rejects rooted, traversal or invalid filename: "+unsafe);
+        GameResources nativeFiles=new GameResources(new GameResources.Storage(){
+            public Set<String> paths(){return new HashSet<>(Arrays.asList("AdvData/GRP/NAMES.DAT","AdvData/GRP/test.crm","AdvData/SE/test.PCM"));}
+            public byte[] read(String path,int limit)throws IOException{return path.equalsIgnoreCase("AdvData/GRP/NAMES.DAT")?new byte[20]:path.equalsIgnoreCase("AdvData/GRP/test.crm")?assets.read("sample.crm"):pck.read(pck.entries.get(0));}
+            public Archive.Source source(String path)throws IOException{byte[] b=read(path,128*1024*1024);return new Archive.Source(){public long size(){return b.length;}public byte[] read(long at,int n)throws IOException{Binary.range(at,n,b.length);return Arrays.copyOfRange(b,(int)at,(int)at+n);}};}
+        });
+        CircusResources nativeData=new CircusResources(nativeFiles,Profiles.get("dc3wy-a09f"));
+        String entry=crm.entries.get(1).name;
+        check(Arrays.equals(diff.argb(),nativeData.image("BST\\\\"+entry+",test.crm").argb()),"duplicate image-directory separator still decodes exact CRXD pixels");
+        check(Arrays.equals(nativeData.audio("SE/test").wav(),nativeData.audio("SE\\\\test").wav()),"duplicate audio separator resolves exact PCM data");
+        ByteArrayOutputStream normalizedAudio=new ByteArrayOutputStream();nativeData.writeAudio("SE\\\\test",normalizedAudio);check(Arrays.equals(nativeData.audio("SE/test").wav(),normalizedAudio.toByteArray()),"streaming playback uses the same native path normalization");
         byte[] corrupt=assets.read("dawn.crx");reject(()->Crx.plain(Arrays.copyOf(corrupt,corrupt.length-5)),"truncated zlib");
         int sizeAt=20;if(Binary.u16(corrupt,12)>=3)sizeAt+=4+(int)Binary.u32(corrupt,20)*16;
         byte[] totalSizeCrx=new byte[corrupt.length+4];System.arraycopy(corrupt,0,totalSizeCrx,0,sizeAt);System.arraycopy(corrupt,sizeAt,totalSizeCrx,sizeAt+4,corrupt.length-sizeAt);totalSizeCrx[14]|=16;

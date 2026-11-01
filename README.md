@@ -7,7 +7,7 @@
 仓库：[kesmeey/Circus-Engine](https://github.com/kesmeey/Circus-Engine)。
 项目目录与命令行工具仍沿用 `circus-runtime`／`dc_runtime` 命名。
 
-Android 最新版 **0.13.14** 增加 W.Y.／P.P. 原版系统进度导入，直接选择对应的 `system.dat`，合并通关、CG、场景和音乐解锁。安装包：`build/distribution/circus-runtime-0.13.14-android-dev.apk`，可覆盖安装，见 [导入说明](docs/ANDROID_01314.md)。保留 [0.13.13 的 W.Y.／P.P. 手机启动与中文补丁兼容](docs/ANDROID_01313.md)。
+Android 最新版 **0.13.15** 修复 W.Y. 夏露露剧情中的重复目录分隔符报错，同时覆盖 P.P. 的同类图片引用。安装包：`build/distribution/circus-runtime-0.13.15-android-dev.apk`，可覆盖安装，见 [修复说明](docs/ANDROID_01315.md)。保留 [0.13.14 的 W.Y.／P.P. 原版系统进度导入](docs/ANDROID_01314.md)和 [0.13.13 的手机启动与中文补丁兼容](docs/ANDROID_01313.md)。
 
 ## 现在能玩的游戏
 

@@ -41,4 +41,12 @@ public final class Binary {
         for(String part:path.split("/",-1))if(part.isEmpty()||part.equals(".")||part.equals(".."))throw new IOException("Invalid resource path segment");
         return path;
     }
+    /** Relative filenames emitted by Windows MES scripts may repeat separators.
+     * Inventory/document paths keep using safePath's stricter canonical form. */
+    public static String nativeResourcePath(String name)throws IOException{
+        if(name==null||name.isEmpty()||name.length()>512||name.startsWith("/")||name.startsWith("\\")||name.indexOf(':')>=0||name.indexOf('\0')>=0)return safePath(name);
+        StringBuilder path=new StringBuilder(name.length());boolean slash=false;
+        for(int i=0;i<name.length();i++){char c=name.charAt(i);if(c=='\\')c='/';if(c!='/'||!slash)path.append(c);slash=c=='/';}
+        return safePath(path.toString());
+    }
 }

@@ -58,14 +58,14 @@ public class CircusResources {
         if(found==null)throw new FileNotFoundException(archive+" : "+requested);return found;
     }
     public Crx.Image image(String reference)throws IOException {
-        if(reference.startsWith("pck:")){int hash=reference.lastIndexOf('#');if(hash<5)throw new IOException("Invalid indexed image");String path="AdvData/GRP/"+Binary.safePath(reference.substring(4,hash));int index;try{index=Integer.parseInt(reference.substring(hash+1));}catch(NumberFormatException e){throw new IOException("Invalid image index",e);}Archive a=files.archive(path);if(index<0||index>=a.entries.size())throw new IOException("Image index out of range");return files.imageAtOffset(path,a.entries.get(index).offset);}
+        if(reference.startsWith("pck:")){int hash=reference.lastIndexOf('#');if(hash<5)throw new IOException("Invalid indexed image");String path="AdvData/GRP/"+Binary.nativeResourcePath(reference.substring(4,hash));int index;try{index=Integer.parseInt(reference.substring(hash+1));}catch(NumberFormatException e){throw new IOException("Invalid image index",e);}Archive a=files.archive(path);if(index<0||index>=a.entries.size())throw new IOException("Image index out of range");return files.imageAtOffset(path,a.entries.get(index).offset);}
         String[] parts=reference.split(",",-1);if(parts.length>2)throw new IOException("Unsupported image reference "+reference);
         int end=parts[0].toLowerCase(Locale.ROOT).endsWith(".crx")?parts[0].length()-4:parts[0].length();char filter=end==0?0:parts[0].charAt(end-1);
         if(filter=='@'||filter=='*'){if(!Dc3Host.supports(profile)&&!profile.id.equals("dc2dm-9d72")&&!PcHost.supports(profile))throw new IOException("Unverified image filter for "+profile.id);parts[0]=parts[0].substring(0,end-1)+parts[0].substring(end);}else filter=0;
-        String patch=loosePatch(extension(Binary.safePath(parts[0]),".CRX"));if(patch!=null)return tint(files.image(patch),filter);
-        if(parts.length==1){String file="AdvData/GRP/"+extension(Binary.safePath(parts[0]),".CRX");return tint(PcHost.supports(profile)?Crx.plain(files.read(file,128*1024*1024),true):files.image(file),filter,profile.id.equals("dc2pc-5769")?2:profile.id.equals("dcpc-2063")?1:0);}
-        String archive="AdvData/GRP/"+extension(Binary.safePath(parts[1]),".CRM");
-        String entry=extension(basename(Binary.safePath(parts[0])),".CRX");
+        String patch=loosePatch(extension(Binary.nativeResourcePath(parts[0]),".CRX"));if(patch!=null)return tint(files.image(patch),filter);
+        if(parts.length==1){String file="AdvData/GRP/"+extension(Binary.nativeResourcePath(parts[0]),".CRX");return tint(PcHost.supports(profile)?Crx.plain(files.read(file,128*1024*1024),true):files.image(file),filter,profile.id.equals("dc2pc-5769")?2:profile.id.equals("dcpc-2063")?1:0);}
+        String archive="AdvData/GRP/"+extension(Binary.nativeResourcePath(parts[1]),".CRM");
+        String entry=extension(basename(Binary.nativeResourcePath(parts[0])),".CRX");
         return tint(files.imageAtOffset(archive,archiveEntry(archive,entry).offset),filter,profile.id.equals("dc2pc-5769")?2:profile.id.equals("dcpc-2063")?1:0);
     }
     /** DD 44A1A0/44A2D0 and DM 405560/405690 integer transforms; transparent pixels are untouched. */
@@ -86,7 +86,7 @@ public class CircusResources {
     }
     public Xpcm audio(String reference)throws IOException {
         if(reference.startsWith("mix:"))return MixedVoice.decode(this,reference);
-        String path=Binary.safePath(reference);
+        String path=Binary.nativeResourcePath(reference);
         if(path.regionMatches(true,0,"VOICE/",0,6)){
             String archive="AdvData/VOICE.DAT",entry=extension(path.substring(6).replace('/','\\'),".PCM");
             if(PcHost.supports(profile)){
@@ -103,7 +103,7 @@ public class CircusResources {
         // sample-wise mixer. Preserve those backends rather than interpreting
         // their references as ordinary XPCM paths.
         if(profile==null||reference.startsWith("mix:")){audio(reference).writeTo(out);return;}
-        String path=Binary.safePath(reference);
+        String path=Binary.nativeResourcePath(reference);
         if(path.regionMatches(true,0,"VOICE/",0,6)){
             String archive="AdvData/VOICE.DAT",raw=path.substring(6).replace('/','\\');
             if(PcHost.supports(profile)){

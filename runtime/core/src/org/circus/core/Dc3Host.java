@@ -351,7 +351,7 @@ public final class Dc3Host implements MesVm.ContextHost,MesVm.ChoiceHost,MesVm.T
             if(a[0]==255){if(musicVolumeBackup!=0){state.write(99,7,musicVolumeBackup);musicVolumeBackup=0;}return true;}
             require(a[0]>=0&&a[0]<254,"temporary music volume");musicVolumeBackup=state.read(99,7);state.write(99,7,musicVolumeBackup*a[0]/100);return true;
         case "wait.audio":require((a[0]&~7)==0,"audio wait mask "+a[0]);publish();audioWaitMask=a[0];pollAudioWait();if(audioWaitMask!=0)nextTicket();return true;
-        case "media.movie":for(int i=0;i<audio.length;i++)pendingAudio[i]="";publish();movie="AdvData/MOVIE/"+Binary.safePath(text(bytes));movieGeneration++;nextTicket();return true;
+        case "media.movie":for(int i=0;i<audio.length;i++)pendingAudio[i]="";publish();movie="AdvData/MOVIE/"+Binary.nativeResourcePath(text(bytes));movieGeneration++;nextTicket();return true;
         default:return false;
         }
     }
