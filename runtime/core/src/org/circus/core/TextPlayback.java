@@ -5,7 +5,7 @@ public final class TextPlayback {
     private TextPlayback(){}
     public static long duration(String profile,int speed,int characters){
         int count=Math.max(0,characters);
-        if(profile.equals("dc3dd-a5a8"))return (long)(count*22.0/(Math.max(0,speed)*2+16)*16.66);
+        if(Dc3Host.supports(profile))return (long)(count*22.0/(Math.max(0,speed)*2+16)*16.66);
         if(profile.equals("dc2dm-9d72")){
             int nativeSpeed=Math.max(0,11-speed);
             if(nativeSpeed==0)return 0;

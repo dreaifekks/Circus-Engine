@@ -58,7 +58,14 @@ public final class Dc3Host implements MesVm.ContextHost,MesVm.ChoiceHost,MesVm.T
     public int movieGeneration;
     public int autosaveGeneration;
     public Dc3Host(CircusResources resources,TextCodec codec){this(resources,codec,false);}
-    public Dc3Host(CircusResources resources,TextCodec codec,boolean originalSystem){if(resources!=null&&!resources.profile.id.equals("dc3dd-a5a8"))throw new IllegalArgumentException("DD host cannot execute "+resources.profile.id);this.resources=resources;gallery=new Dc3Gallery(resources);this.originalSystem=originalSystem;state=new Dc3State(originalSystem);dialogue=new DialogueHost(codec);dialogue.familyName="朝倉";dialogue.givenName="清隆";}
+    /** The D.C.III builds that share this host. Only the opcode numbering moves between
+     *  them, and the profile carries it, so nothing else here is build-specific. */
+    public static boolean supports(String id){return id.equals("dc3dd-a5a8")||id.equals("dc3wy-a09f")||id.equals("dc3pp-9872");}
+    public static boolean supports(Profile p){return p!=null&&supports(p.id);}
+    /** wait.message - the opcode that closes a line of dialogue. */
+    public static int waitMessageOpcode(String id){return id.equals("dc3pp-9872")?0x07:0x06;}
+    public Dc3Layout layout(){return scene.layout;}
+    public Dc3Host(CircusResources resources,TextCodec codec,boolean originalSystem){if(resources!=null&&!supports(resources.profile.id))throw new IllegalArgumentException("DD host cannot execute "+resources.profile.id);this.resources=resources;gallery=new Dc3Gallery(resources);this.originalSystem=originalSystem;state=new Dc3State(originalSystem);dialogue=new DialogueHost(codec);dialogue.familyName="朝倉";dialogue.givenName="清隆";if(resources!=null)scene.layout=Dc3Layout.of(resources.profile.id);}
     public String checkpointLabel(){return checkpointLabel;}
     public void attach(Variables variables){this.variables=variables;}
     public void position(MesScript script,int pc){scriptName=script.name;scriptOffset=pc;}
@@ -67,7 +74,7 @@ public final class Dc3Host implements MesVm.ContextHost,MesVm.ChoiceHost,MesVm.T
     public long remainingMillis(){return credits.active()?Math.min(1000,credits.end()-credits.elapsed):remaining;}
     public boolean audioIsActive(int channel){return audioActive[channel];}
     public boolean beforeInstruction(Profile profile,int opcode)throws IOException {
-        if(!profile.id.equals("dc3dd-a5a8"))throw new IOException("DD host requires the DD semantic profile");
+        if(!supports(profile.id))throw new IOException("DD host requires a D.C.III semantic profile, got "+profile.id);
         boolean wait=dialogue.beforeInstruction(profile,opcode);syncDialogue();if(wait)publish();return waiting();
     }
     private void syncDialogue()throws IOException {boolean current=dialogue.waiting();if(current&&!wasDialogue){nextTicket();if(originalSystem&&!dialogue.shownText.isEmpty())history.append(dialogue.shownSpeaker,dialogue.shownText,historyVoice,scriptName,scriptOffset);historyVoice="";}wasDialogue=current;}
@@ -138,7 +145,17 @@ public final class Dc3Host implements MesVm.ContextHost,MesVm.ChoiceHost,MesVm.T
     public void acceptMenuAction(int button)throws IOException{remaining=0;if(button>=0)state.write(99,245,button);menuSound(button<0?255:ui.current.buttons.get(button).clickSound);ui.closeConfirmation();ui.waiting=false;ui.pressed=ui.hovered=-1;}
     public void hoverMenu(int button)throws IOException{if(!ui.waiting||button==ui.hovered)return;require(button>=-1&&button<ui.current.buttons.size(),"hover button");ui.hovered=button;if(button>=0){int sound=ui.current.buttons.get(button).hoverSound;if(sound!=255){audio[1]=resources.named("sound",sound);audioLoop[1]=false;audioActive[1]=true;audioGeneration[1]++;}}}
     private Dc3Scene.Quad uiQuad(int[] a)throws IOException{require(a.length==8,"UI quad extension");int s=slot(a[6]&63);Dc3Scene.Quad q=new Dc3Scene.Quad();q.resource=scene.pending[s]!=null?scene.pending[s]:scene.slots[s].resource;if(q.resource.isEmpty())q.resource="@slot:"+s;q.x=ui.current.x+a[0];q.y=ui.current.y+a[1];q.sx=a[2];q.sy=a[3];q.width=a[4];q.height=a[5];q.opaque=(a[6]&128)!=0;return q;}
-    private void resolveUi(Dc3Scene.Quad q)throws IOException{if(q.resource.startsWith("@slot:")){int s=Integer.parseInt(q.resource.substring(6));q.resource=scene.pending[s]!=null?scene.pending[s]:scene.slots[s].resource;require(!q.resource.isEmpty(),"UI runtime surface slot "+s);}require(!q.resource.isEmpty(),"UI runtime surface");}
+    /** A UI quad keeps "@slot:N" when its slot was still empty at the moment it was built -
+     *  a template that outlives the surface, or a panel drawn before the loader ran. The
+     *  original reads the slot again when it draws and shows nothing while it is empty, so
+     *  an unresolved placeholder resolves to the empty string rather than stopping the game. */
+    public String uiSurface(String resource)throws IOException{
+        if(resource==null||!resource.startsWith("@slot:"))return resource;
+        int s=slot(Integer.parseInt(resource.substring(6)));
+        String name=scene.pending[s]!=null?scene.pending[s]:scene.slots[s].resource;
+        return name.equals("-")?"":name;
+    }
+    private void resolveUi(Dc3Scene.Quad q)throws IOException{q.resource=uiSurface(q.resource);}
     private boolean uiCommand(String op,int[] a,byte[] bytes)throws IOException{
         switch(op){
         case "ui.music_end_action":musicEndAction=text(bytes);return true;
@@ -156,7 +173,7 @@ public final class Dc3Host implements MesVm.ContextHost,MesVm.ChoiceHost,MesVm.T
         case "system.version":ui.version+=text(bytes);require(ui.version.length()<128,"version label length");return true;
         case "ui.template":ui.store(a[0],true);return true;
         case "ui.panel":if(a[0]==0){ui.clear();list.clear();state.write(99,246,0);}else ui.store(a[0],false);return true;
-        case "ui.resource":require(a[0]<=4,"UI resource slot");if(!text(bytes).equals("-"))scene.slots[36+a[0]].resource=text(bytes);return true;
+        case "ui.resource":require(a[0]<=4,"UI resource slot");if(!text(bytes).equals("-"))scene.slots[scene.layout.uiBase+a[0]].resource=text(bytes);return true;
         case "host.command_with_string":ui.button(a,bytes);return true;
         case "ui.button_sound":if(a[0]!=255)ui.last().hoverSound=a[0];if(a[1]!=255)ui.last().clickSound=a[1];return true;
         case "ui.button_sprite":{require(a.length==8,"button sprite extension");require(a[7]==99||a[7]>=0&&a[7]<=11,"UI sprite state "+a[7]);Dc3Ui.Sprite s=new Dc3Ui.Sprite();s.quad=uiQuad(a);s.state=a[7];require(ui.last().sprites.size()<1024,"UI sprite count");ui.last().sprites.add(s);return true;}
@@ -245,10 +262,11 @@ public final class Dc3Host implements MesVm.ContextHost,MesVm.ChoiceHost,MesVm.T
         case "image.load":{
             int s=slot(a[0]);if(s==0)return true;
             String name=resource(text(bytes));if(name.equals("--")){require(systemScene!=null,"previous-scene image restore");name=systemScene.layers[s].resource;}
-            if(s>=4&&s<=8)name=name.replace('?',(char)('1'+Math.min(2,variables.read(5,8))));
-            if(s>=19&&s<=23){name=name.replace('?',(char)('1'+Math.min(2,variables.read(5,8))));int comma=name.indexOf(',');if(comma>=0){String stem=name.substring(0,comma),suffix="";if(stem.endsWith("*")||stem.endsWith("@")){suffix=stem.substring(stem.length()-1);stem=stem.substring(0,stem.length()-1);}if(!stem.endsWith("_B"))stem+="_B";name=stem+suffix+name.substring(comma);}}
-            if(imageTone!=0&&(s>=4&&s<=13||s>=19&&s<=23&&name.regionMatches(true,0,"BST\\",0,4))){int comma=name.indexOf(',');if(comma>=0){String stem=name.substring(0,comma);if(stem.endsWith("*")||stem.endsWith("@"))stem=stem.substring(0,stem.length()-1);name=stem+(imageTone==1?'*':'@')+name.substring(comma);}}
-            if(s==1){Arrays.fill(scene.pending,0,19,null);if(name.equalsIgnoreCase("BG\\BLACK")||name.equalsIgnoreCase("BG\\WHITE"))scene.novelMode=false;
+            Dc3Layout l=scene.layout;
+            if(l.lead(s))name=name.replace('?',(char)('1'+Math.min(2,variables.read(5,8))));
+            if(l.chip(s)){name=name.replace('?',(char)('1'+Math.min(2,variables.read(5,8))));int comma=name.indexOf(',');if(comma>=0){String stem=name.substring(0,comma),suffix="";if(stem.endsWith("*")||stem.endsWith("@")){suffix=stem.substring(stem.length()-1);stem=stem.substring(0,stem.length()-1);}if(!stem.endsWith("_B"))stem+="_B";name=stem+suffix+name.substring(comma);}}
+            if(imageTone!=0&&(l.cast(s)||l.chip(s)&&name.regionMatches(true,0,"BST\\",0,4))){int comma=name.indexOf(',');if(comma>=0){String stem=name.substring(0,comma);if(stem.endsWith("*")||stem.endsWith("@"))stem=stem.substring(0,stem.length()-1);name=stem+(imageTone==1?'*':'@')+name.substring(comma);}}
+            if(s==1){Arrays.fill(scene.pending,0,l.chipFirst,null);if(name.equalsIgnoreCase("BG\\BLACK")||name.equalsIgnoreCase("BG\\WHITE"))scene.novelMode=false;
                 // 42E3B7 -> 441E00 -> 441AF0: a new non-novel background resets its render object.
                 if(!scene.novelMode){scene.stop(1);scene.slots[1]=new Dc3Scene.Layer();scene.slots[1].priority=0;}
             }
@@ -258,7 +276,8 @@ public final class Dc3Host implements MesVm.ContextHost,MesVm.ChoiceHost,MesVm.T
             String name=text(bytes);scene.quads.clear();if(name.startsWith(":n")){scene.novelMode=true;return true;}if(name.startsWith(":r")){scene.novelMode=false;return true;}
             if(name.equals("--")){require(systemScene!=null,"background restore");gallery.image(state,systemScene.layers[1].resource);return true;} // Reuse the caller image queued by 3A.
             gallery.image(state,name); // 42D3C6 -> 40EDC0, exact NAMES entry; preloading alone does not unlock.
-            for(int s=4;s<=13;s++)scene.slots[s].resource="";scene.slots[24].resource="";
+            for(int s=scene.layout.spriteFirst;s<scene.layout.spriteFirst+2*scene.layout.spriteCount;s++)scene.slots[s].resource="";
+            scene.slots[scene.layout.overlay].resource="";
             return true;
         }
         case "ui.origin":scene.uiX=a[0];scene.uiY=a[1];return true;
@@ -268,14 +287,14 @@ public final class Dc3Host implements MesVm.ContextHost,MesVm.ChoiceHost,MesVm.T
             Dc3Scene.Quad q=new Dc3Scene.Quad();q.resource=name;q.x=scene.uiX+a[0];q.y=scene.uiY+a[1];q.sx=a[2];q.sy=a[3];q.width=a[4];q.height=a[5];q.opaque=(a[6]&128)!=0;scene.quads.add(q);scene.revision++;return true;
         }
         case "scene.character":{
-            int s=a[0]+4;require(s>=4&&s<=8,"character slot");String name=text(bytes);
-            if(name.equals("-")){scene.pending[s]="-";scene.pending[s+5]="-";}else require(name.startsWith(".")||name.equals("--")&&systemScene!=null,"character restore/name "+name);
+            int s=a[0]+scene.layout.spriteFirst;require(scene.layout.lead(s),"character slot");String name=text(bytes);
+            if(name.equals("-")){scene.pending[s]="-";scene.pending[scene.layout.companion(s)]="-";}else require(name.startsWith(".")||name.equals("--")&&systemScene!=null,"character restore/name "+name);
             return true;
         }
-        case "scene.character_overlay":require(!text(bytes).equals("--")||systemScene!=null,"overlay restore");if(text(bytes).equals("-"))scene.pending[slot(a[0]+9)]="-";return true;
-        case "scene.face":if(text(bytes).equals("-")){scene.pending[30]="-";scene.pending[31]="-";}return true;
+        case "scene.character_overlay":require(!text(bytes).equals("--")||systemScene!=null,"overlay restore");if(text(bytes).equals("-"))scene.pending[slot(a[0]+scene.layout.companion(scene.layout.spriteFirst))]="-";return true;
+        case "scene.face":if(text(bytes).equals("-")){scene.pending[scene.layout.face]="-";scene.pending[scene.layout.face+1]="-";}return true;
         case "scene.character_transform":{
-            int flags=a[3];if(flags==255)return true;int s=flags==0?a[2]+4:(flags&15)+4;require(s>=4&&s<=8,"character transform slot");
+            int flags=a[3];if(flags==255)return true;int s=flags==0?a[2]+scene.layout.spriteFirst:(flags&15)+scene.layout.spriteFirst;require(scene.layout.lead(s),"character transform slot");
             Dc3Scene.Layer layer=scene.slots[s];
             if(flags==0){scene.stop(s);layer.x=a[0];layer.y=a[1];}
             else if((flags&0xf0)==0x10){layer.scaleX=layer.scaleY=a[0];layer.pivotX=a[1];layer.pivotY=a[2];}
@@ -290,7 +309,7 @@ public final class Dc3Host implements MesVm.ContextHost,MesVm.ChoiceHost,MesVm.T
         case "scene.transition":{
             if(a[0]==9){publish();UiCapture next=SceneCaptures.dd(scene.capture(),SceneCaptures.ddPanel(ui,variables),ui.palette,uiCapture);uiCapture=captureRenderer==null?next:captureRenderer.flatten(next);scene.slots[0].resource="@ui-capture";return true;}
             int mode=a[0];if(mode==32||mode==7||mode==10||mode==11||mode==13||mode==14||mode==23||mode==24||mode==25||mode==30||mode==31)return true;
-            if(mode==51||mode==52){for(int i=0;i<(mode==51?4:5);i++)if((a[1]&(1<<i))!=0)scene.shake(i+4,mode==51?0:1);return true;}
+            if(mode==51||mode==52){for(int i=0;i<(mode==51?4:5);i++)if((a[1]&(1<<i))!=0)scene.shake(i+scene.layout.spriteFirst,mode==51?0:1);return true;}
             if(mode==4||mode==6){for(int i=0;i<43;i++)scene.shake(i,mode==4?0:1);return true;}
             require(mode==0||mode==1||mode==2||mode==3||mode==5||mode==16||mode==17||mode==20||mode==21,"transition mode "+mode);
             scene.transition=mode;scene.transitionParameter=a[1];
@@ -298,8 +317,8 @@ public final class Dc3Host implements MesVm.ContextHost,MesVm.ChoiceHost,MesVm.T
             String mask="";long duration=(a[1]+1)*1000L/3;
             if(mode==3)duration=167; // Five ticks up, five down (407CC0 / 408CCC).
             if(mode==16){mask="system\\effbreak";duration=1000;}
-            if(mode==17){mask=a[1]==1?"MSK\\MASK11A":"MSK\\MASK04A";scene.pending[21]=mask;duration=1000;}
-            if(mode==20||mode==21){mask=scene.pending[21]!=null?scene.pending[21]:scene.slots[21].resource;require(!mask.isEmpty()&&!mask.equals("-"),"transition without mask");duration=a[1]*200L;}
+            if(mode==17){mask=a[1]==1?"MSK\\MASK11A":"MSK\\MASK04A";scene.pending[scene.layout.mask]=mask;duration=1000;}
+            if(mode==20||mode==21){int m=scene.layout.mask;mask=scene.pending[m]!=null?scene.pending[m]:scene.slots[m].resource;require(!mask.isEmpty()&&!mask.equals("-"),"transition without mask");duration=a[1]*200L;}
             scene.fade.start(mode,a[1],duration,mask,scene.published);
             if(mode==2||mode==16){scene.petals.start(0);scene.fog=false;scene.clouds=false;}
             delay(scene.fade.duration,false);
@@ -309,7 +328,7 @@ public final class Dc3Host implements MesVm.ContextHost,MesVm.ChoiceHost,MesVm.T
             if(a[0]==1||a[0]==3||a[0]==9||a[0]==11){scene.petals.start(a[0],a[1]);return true;}
             if(a[0]==16){scene.clouds=a[1]!=0;scene.environmentTime=0;return true;}
             if(a[0]==0){scene.petals.start(0);scene.fog=false;scene.clouds=false;return true;}
-            require(a[0]==7,"scene effect "+a[0]);scene.fog=a[1]!=0;if(!scene.fog)scene.pending[25]="-";scene.revision++;return true;
+            require(a[0]==7,"scene effect "+a[0]);scene.fog=a[1]!=0;if(!scene.fog)scene.pending[scene.layout.fog]="-";scene.revision++;return true;
         case "audio.music":{
             if(a[0]==255){pendingAudio[0]="";musicId=-1;return true;}
             require(a[1]>=0&&a[1]<=2,"music start mode "+a[1]);

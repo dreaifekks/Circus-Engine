@@ -17,9 +17,10 @@ public final class CompatibilityAudit {
                 if(record.opcode>=script.profile.encodedStart&&record.opcode<script.profile.wordsStart&&script.profile.textVerified){script.nativeText(record);encoded++;}
             }
         }
-        Crx.Image image=data.image("SYSTEM/ADVMENU_CHIP");
+        String shared="SYSTEM/ADVMENUCHIP";if(!files.paths().contains("advdata/grp/system/advmenuchip.crx"))shared="SYSTEM/ADVMENU_CHIP";
+        Crx.Image image=data.image(shared);
         System.out.println("profile="+version.profileId+" scripts="+scripts+" records="+records+" header_boundaries="+headers+" encoded_records="+encoded);
-        System.out.println("shared_resource_decode=SYSTEM/ADVMENU_CHIP "+image.width+"x"+image.height+" bpp="+image.bpp);
+        System.out.println("shared_resource_decode="+shared+" "+image.width+"x"+image.height+" bpp="+image.bpp);
         System.out.println("physical_operation_counts="+operations);
         System.out.println("scope=structural/decoder/resource audit only; no native execution or playability claim");
     }

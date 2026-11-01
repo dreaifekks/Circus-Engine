@@ -21,7 +21,7 @@ def generate():
         if model not in ('BYTE_WRAP','DC2_PACKED','PC_BYTE','PC_WIDE'): raise ValueError('Unknown variable model: '+model)
         stride=6 if f['layout']=='offset2' else 4
         marker=s['decoder'].get('version_bytes',3 if stride==6 else 2)
-        fields=[json.dumps(pid),str(f['version']),str(stride),str(marker),str(starts.get('u8str',starts['string'])),str(starts['string']),str(starts['encoded_string']),str(starts['u16x4']),str(s['decoder']['extension_opcode']),str(c['label_opcode']),str(c['block_marker_opcode']),str(c['companion_opcode']),str(c['block_scan_signed_opcode']).lower(),str(mapping == {'36':32}).lower(),str(mapping is not None).lower(),'false','Variables.Model.'+model,'ops']
+        fields=[json.dumps(pid),str(f['version']),str(stride),str(marker),str(starts.get('u8str',starts['string'])),str(starts['string']),str(starts['encoded_string']),str(starts['u16x4']),str(s['decoder']['extension_opcode']),str(c['label_opcode']),str(c['block_marker_opcode']),str(c['companion_opcode']),str(c['block_scan_signed_opcode']).lower(),str(mapping == {'36':32}).lower(),str(s['decoder'].get('text_verified',mapping is not None)).lower(),'false','Variables.Model.'+model,'ops']
         alt = f.get('alt_versions')
         if alt: fields.append('new int[]{'+','.join(str(x) for x in alt)+'}')
         lines += ['return new Profile('+','.join(fields)+');','}']

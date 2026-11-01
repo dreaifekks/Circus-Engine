@@ -36,7 +36,11 @@ public final class Dc3State implements Variables.Special {
         if(b==94||b==95){if(i==50||(i>=0&&i<voiceCount))return (b==94?b94:b95)[i];return -1;}
         if(b!=99)return 0;index(i,256);
         if(i==217){index(b99[218],20);return b93[b99[218]];}
-        if(Dc3StateRules.READ[i]==2)throw new IOException("Unimplemented native state query 99:"+i);
+        // READ kind 2 is a query whose native answer lives in a struct the host does not
+        // own (dc3dd-state.json: storage verified, business role unknown). D.C.III D.D.
+        // never asks, but With You and P.P. do - their WIN_SIZE queries bank 99 index 3
+        // for the window mode - so answer with the stored byte instead of aborting. It
+        // defaults to 0, the same value a fresh native session holds there.
         return Dc3StateRules.READ[i]==0?0:b99[i];
     }
     public void write(int b,int i,int value)throws IOException {

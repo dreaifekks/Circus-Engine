@@ -9,6 +9,7 @@
 
 | 版本 | 安装包 | 内容 |
 |---|---|---|
+| 0.13.12 | `build/android/circus-core-debug.apk` | 接入 D.C.III With You（`dc3wy-a09f`）与 D.C.III P.P.（`dc3pp-9872`）：按操作码重编号绑定语义表，场景图面布局（立绘／雾／樱花／擦除遮罩／对话框 UI 面）按版本区分。两部均验证启动、正文、选择、立绘、存读档像素往返。 |
 | 0.13.11 | `build/android/circus-core-debug.apk` | 接入 D.C.II 2006 原版：按钮文字（`0x50`）、资源句柄（`0x24`）、闹钟音床的裸 WAV、缺素材降级。见 [0.13.11 说明](ANDROID_01311.md) |
 | 0.13.10 | `build/distribution/circus-runtime-0.13.10-android-dev.apk` | DC3R Unity 菜单与存档优化：保存只更新当前槽位，菜单贴图共用文件句柄，缩小暂存预览图。长历史／102 槽保存由约 1.16 秒降至 49 毫秒；原画面与旧存档兼容。见 [说明](ANDROID_01310.md) |
 | 0.13.9 | `build/distribution/circus-runtime-0.13.9-android-dev.apk` | 原版进度导入简化为「更多 → 导入原版进度（选文件）」，直接选 `system.dat` 或 DC3R 的 `global.dat`，不要求固定目录或原文件名。见 [说明](ANDROID_0139.md) |
@@ -33,6 +34,7 @@
 
 | 版本 | 内容 |
 |---|---|
+| 0.13.12-pc-dev | 与 Android 0.13.12 同核心，含 D.C.III With You 与 D.C.III P.P. 接入。产物 `build/distribution/dc-runtime-0.13.12-pc-dev-windows-x64/` |
 | 0.13.11-pc-dev | 与 Android 0.13.11 同核心，含 D.C.II 2006 原版接入。产物 `build/distribution/dc-runtime-0.13.11-pc-dev-windows-x64/` |
 | 0.11.0-pc-dev | 自包含 Windows x64 解释器测试包，双击选游戏目录，自带 JRE 与 FFmpeg。DCPC、DC2PC、DC2DM、DC3DD 四部均验证原版启动、正文、选择、存读档和到达结尾；0.10 的 48 次路线策略测试通过，0.11 另跑四部各一条完整路线，含实际音视频输出检查。修复连续系统截图丢失底图，并保存冻结的控件、颜色和动画状态（四部均通过嵌套截图、40 次重复捕获及存档后的逐像素比较）。见 [PC 兼容性说明](PC_COMPATIBILITY.md) |
 | 0.10 | 补入 PC1 原版姓名编辑、存档缩略图／角色图标、音乐位置续播、逐字显示及显示进度存档、角色语音设置、原版滑条、回看预览与滚动条拖动；保留 0.9 的原脚本鉴赏列表。325 项 JVM 断言、47 项 Python 测试通过。见 [PC 兼容性说明](PC_COMPATIBILITY.md) |

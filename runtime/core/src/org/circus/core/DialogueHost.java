@@ -22,9 +22,9 @@ public final class DialogueHost implements MesVm.FlowHost {
     public boolean rendered(){return rendered;}
     public boolean waiting(){return reason!=0;}
     public boolean beforeInstruction(Profile profile,int opcode)throws IOException {
-        if(!profile.id.equals("dc3dd-a5a8"))throw new IOException("Dialogue host is not verified for "+profile.id);
+        if(!Dc3Host.supports(profile.id))throw new IOException("Dialogue host is not verified for "+profile.id);
         if(waiting())return true;
-        if(previousText){previousText=false;if(opcode!=0x06){beginWait(8);return true;}}
+        if(previousText){previousText=false;if(opcode!=Dc3Host.waitMessageOpcode(profile.id)){beginWait(8);return true;}}
         return false;
     }
     private void beginWait(int nativeReason)throws IOException {

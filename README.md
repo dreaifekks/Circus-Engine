@@ -9,7 +9,7 @@
 
 ## 现在能玩的游戏
 
-有独立宿主、由原版脚本驱动的一共 6 个入口。Windows 包和 Android APK 用的是同一份核心，
+有独立宿主、由原版脚本驱动的一共 8 个入口。Windows 包和 Android APK 用的是同一份核心，
 两边都能打开。
 
 | 作品 | 数据格式 | 目前能跑到哪 |
@@ -19,6 +19,8 @@
 | D.C.II 〜ダ・カーポII〜（2006 原版） | `dc2-3363` | 启动／正文／存读档／系统菜单／CG Mode／场景回想／闹钟设定；整条路线尚未验证 |
 | D.C.II Dearest Marriage | `dc2dm-9d72` | 启动／正文／存读档／回看与语音重播／CG·场景·音乐鉴赏／到片尾 |
 | D.C.III DreamDays | `dc3dd-a5a8` | 七条剧情路线到片尾 |
+| D.C.III With You | `dc3wy-a09f` | 启动／正文／选择／存读档；整条路线尚未验证 |
+| D.C.III P.P. | `dc3pp-9872` | 启动／正文／选择／存读档；整条路线尚未验证 |
 | D.C.III R（Unity 5.5 版） | `dc3r-unity-550` | 标题／章节选择／正文／系统菜单；全路线尚未验证 |
 
 「到片尾」指在本机完整跑通并返回标题；不等于原版所有演出时序和设置副作用都已复刻。
@@ -26,8 +28,8 @@
 
 ### 只能识别，不能运行
 
-解包器和格式表覆盖 28 种 MES 变体（D.C. White Season、Summer Vacation、After Seasons、
-D.C.II To You／Spring Celebration、D.C.III With You／P.P. 等），可以扫描、解包、反汇编、
+解包器和格式表覆盖 26 种 MES 变体（D.C. White Season、Summer Vacation、After Seasons、
+D.C.II To You／Spring Celebration 等），可以扫描、解包、反汇编、
 导出图片和音频；但运行时没有对应宿主，选中会直接报 `Unsupported profile`。
 
 范围只到 D.C. 1／2／3 及其 FD，不含 D.C.4／5。其他作品的格式支持不等于能运行。

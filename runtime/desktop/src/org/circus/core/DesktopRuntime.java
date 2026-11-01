@@ -20,7 +20,10 @@ public final class DesktopRuntime implements AutoCloseable {
         else {
         GameVersion version=GameVersion.detect(files);
         CircusResources resources=new CircusResources(files,version.profile());TextCodec codec=GameText.detect(files,version.profile());
-        if(version.profileId.equals("dc3dd-a5a8"))engine=new DesktopDd(resources,codec,audit);
+        // D.C.III D.D. / With You / P.P. share one host; only the opcode numbering and the
+        // resource layout move between them, and both are carried by the profile.
+        if(version.profileId.equals("dc3dd-a5a8")||version.profileId.equals("dc3wy-a09f")
+                ||version.profileId.equals("dc3pp-9872"))engine=new DesktopDd(resources,codec,audit);
         else if(version.profileId.equals("dc2dm-9d72")||PcHost.supports(version.profile()))engine=new DesktopLegacy(resources,codec,audit);
         else throw new IOException("Unsupported profile "+version.profileId);
         }
@@ -43,6 +46,7 @@ public final class DesktopRuntime implements AutoCloseable {
                         if(selected!=null&&(selected.equals("start")||selected.equals("sce_start"))){ImageIO.write(engine.render(),"png",out.resolve("01-title.png").toFile());title=true;}
                     }else if(lines==0&&actions.contains("sel01"))selected="sel01";
                     else if(lines==0&&actions.contains("sceselect01"))selected="sceselect01";
+                    else if(lines==0&&actions.contains("menu01"))selected="menu01"; // D.C.III W.Y.: the branch select opens with menu01 before sel01.
                     else if(lines>0&&!choice){ImageIO.write(engine.render(),"png",out.resolve("04-choice.png").toFile());selected=actions.isEmpty()?null:actions.get(0);choice=true;choiceAt=lines;}
                     if(selected==null)throw new IOException("Audit needs original menu action at "+location+": "+actions);
                     engine.choose(selected);continue;

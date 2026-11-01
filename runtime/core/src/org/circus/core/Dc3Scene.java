@@ -27,6 +27,8 @@ public final class Dc3Scene {
     // Logical resource slots are not the original render-object indices.
     public final Layer[] slots=new Layer[43];
     public final String[] pending=new String[43];
+    /** Slot layout of the build this scene belongs to; see Dc3Layout. */
+    public Dc3Layout layout=Dc3Layout.DD;
     public boolean centerNextBackground;
     public int revision,transition,transitionParameter;
     public boolean novelMode,fog,clouds;public long environmentTime;
@@ -63,11 +65,11 @@ public final class Dc3Scene {
     }
     public float displacement(int slot,int axis){for(Motion m:motions)if(m.slot==slot&&m.axis==axis){float t=(m.elapsed*60/1000f%40)/10;int segment=(int)t;float[] v={0,8,0,m.bipolar?-8:8,0};return v[segment]+(v[segment+1]-v[segment])*(t-segment);}return 0;}
     public Dc3Scene(){for(int i=0;i<slots.length;i++)slots[i]=new Layer();slots[1].priority=0;}
-    /** 427620 / 4240C0 releases scenario images; native UI slots 36..42 survive. */
+    /** 427620 / 4240C0 releases scenario images; the native UI slots above uiSlotBase survive. */
     public void resetForTransfer(){
         for(Move m:moves){Layer l=slots[m.slot];l.x=m.x1;l.y=m.y1;l.alpha=m.a1;}
         stop();recorded.clear();recording=false;quads.clear();petals.start(0);fog=false;clouds=false;
-        fade.elapsed=fade.duration;for(int i=0;i<slots.length;i++){if(i<36)slots[i].resource="";pending[i]=null;slots[i].priority=i==1?0:50;}
+        fade.elapsed=fade.duration;for(int i=0;i<slots.length;i++){if(i<layout.uiBase)slots[i].resource="";pending[i]=null;slots[i].priority=i==1?0:50;}
         centerNextBackground=false;published=capture();revision++;
     }
     public void publish(){boolean changed=false;for(int i=0;i<slots.length;i++)if(pending[i]!=null){slots[i].resource=pending[i].equals("-")?"":pending[i];if(i==1)slots[i].centered=centerNextBackground;pending[i]=null;changed=true;}centerNextBackground=false;if(changed)revision++;published=capture();}
