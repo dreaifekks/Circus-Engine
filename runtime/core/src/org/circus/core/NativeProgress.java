@@ -30,7 +30,15 @@ public final class NativeProgress {
         new Layout("dc2dm-9d72","DC2DM",15716,0xe4,0x148,0x17a,0x210,400,1200,650,true,
             new int[]{0,1,2,14,15,20,29,30,31,32},new int[0]),
         new Layout("dc3dd-a5a8","DC3DD",21356,0xcc,0x174,0x304,0x7b4,400,1200,650,false,
-            new int[]{100,101,102,103,104,105,106,107,110},new int[0])
+            new int[]{100,101,102,103,104,105,106,107,110},new int[0]),
+        // WY getter 40BF90: +C0 globals, +168 music, +2F8 CG, +7A8 scenes.
+        // system.dat stores the first 4528 bytes of the object then 7F8 voice bytes.
+        new Layout("dc3wy-a09f","DC3WY",19744,0xc0,0x168,0x2f8,0x7a8,400,1200,650,false,
+            new int[]{100,101,102,103,104,105,106,110},new int[]{101}),
+        // PP writes 3C8C bytes from 7410D8. Getter 4256A0/425AF3 binds globals
+        // at 741160 and LSB-first flag arrays at 7411C4/7411DF/741275.
+        new Layout("dc3pp-9872","DC3PP",15500,0x88,0xec,0x107,0x19d,210,1200,650,true,
+            new int[]{0,1,2,3,4,5,28},new int[0])
     };
     private static Layout layout(String id)throws IOException{for(Layout l:LAYOUTS)if(l.id.equals(id))return l;throw new IOException("尚未适配此版本的原版进度："+id);}
     public static boolean supports(String id){for(Layout l:LAYOUTS)if(l.id.equals(id))return true;return false;}
@@ -39,11 +47,12 @@ public final class NativeProgress {
     public static List<String> sourcePaths(GameResources files,String id)throws IOException{
         layout(id);List<String> result=new ArrayList<>();
         for(String path:new String[]{"AdvData/SaveData/system.dat","SaveData/system.dat","system.dat"})if(files.paths().contains(path.toLowerCase(Locale.ROOT)))result.add(path);
+        if(id.equals("dc3wy-a09f")||id.equals("dc3pp-9872")){String path=(id.equals("dc3wy-a09f")?"dc3wy":"dc3pp")+"/system.dat";if(files.paths().contains(path))result.add(path);}
         return result;
     }
     public static boolean storySlot(String id,String source,String path)throws IOException{
         layout(id);String parent=source.substring(0,source.lastIndexOf('/')+1).toLowerCase(Locale.ROOT),p=path.toLowerCase(Locale.ROOT);
-        String prefix=id.equals("dcpc-2063")?"dcpc":id.equals("dc2-3363")?"dc2":id.equals("dc2pc-5769")?"dc2pc":id.equals("dc2dm-9d72")?"dc2dm":"dc3dd";
+        String prefix=id.equals("dcpc-2063")?"dcpc":id.equals("dc2-3363")?"dc2":id.equals("dc2pc-5769")?"dc2pc":id.equals("dc2dm-9d72")?"dc2dm":id.equals("dc3wy-a09f")?"dc3wy":id.equals("dc3pp-9872")?"dc3pp":"dc3dd";
         return p.startsWith(parent)&&p.substring(parent.length()).matches(prefix+"[0-9]+\\.dat");
     }
     public static final class Summary {
@@ -83,7 +92,7 @@ public final class NativeProgress {
     public static final class Target implements Variables.Special {
         public final String profileId;public final Dc2Host legacy;public final Dc3State dd;
         public Target(CircusResources data,TextCodec codec)throws IOException{
-            layout(data.profileId);profileId=data.profileId;dd=profileId.equals("dc3dd-a5a8")?new Dc3State(true):null;legacy=dd==null?Dc2Host.create(data,codec):null;
+            layout(data.profileId);profileId=data.profileId;dd=Dc3Host.supports(profileId)?new Dc3State(true):null;legacy=dd==null?Dc2Host.create(data,codec):null;
         }
         public int read(int bank,int index)throws IOException{return dd==null?legacy.read(bank,index):dd.read(bank,index);}
         public void write(int bank,int index,int value)throws IOException{if(dd==null)legacy.write(bank,index,value);else dd.write(bank,index,value);}

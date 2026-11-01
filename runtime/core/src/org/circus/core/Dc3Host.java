@@ -164,7 +164,7 @@ public final class Dc3Host implements MesVm.ContextHost,MesVm.ChoiceHost,MesVm.T
         case "dd.grid.common_sprite":{Dc2Ui.Quad q=ScriptList.sprite(a);if(q.state==-1)list.marker=q;else list.common.add(q);return true;}
         case "dd.grid.item_sprite":list.last().sprites.add(ScriptList.sprite(a));return true;
         case "dd.grid.columns":require(a[0]>0&&a[0]<=50,"list column count");list.columns=a[0];return true;
-        case "dd.grid.text":if(a[3]==99)list.textStyle=a[0];else{Dc2Ui.Quad q=new Dc2Ui.Quad();q.type=2;q.x=(short)a[0];q.y=(short)a[1];q.flags=list.textStyle;q.state=a[3]==0?99:a[3];q.text=text(bytes);list.last().sprites.add(q);}return true;
+        case "dd.grid.text":if(a[3]==99)list.textStyle=a[0];else{Dc2Ui.Quad q=new Dc2Ui.Quad();q.type=2;q.x=(short)a[0];q.y=(short)a[1];q.flags=list.textStyle;q.state=a[3]==0?99:a[3];q.text=dialogue.codec.decodeUnmapped(bytes);list.last().sprites.add(q);}return true;
         case "dd.grid.configure":require(a.length==8,"grid bounds");System.arraycopy(a,0,ui.gridBounds,0,8);ui.grid.clear();list.clear();ui.gridWaiting=false;return true;
         case "dd.grid.rect":{Dc3Ui.Button b=new Dc3Ui.Button();b.left=a[0];b.top=a[1];b.right=a[2];b.bottom=a[3];require(ui.grid.size()<50,"grid count");ui.grid.add(b);return true;}
         case "dd.grid.sound":ui.gridHoverSound=a[0];ui.gridClickSound=a[1];return true;
@@ -229,6 +229,9 @@ public final class Dc3Host implements MesVm.ContextHost,MesVm.ChoiceHost,MesVm.T
         case "scene.checkpoint":checkpointLabel=text(bytes);variables.appendHistory();return true;
         case "dd.audio.seek":require(a[0]==0,"audio seek channel "+a[0]);musicRoom.seek=Math.max(0,Math.min(100,state.read(99,187)+1));musicRoom.seekGeneration++;return true;
         case "system.command":
+            // PP 412DD5: submode 0 selects native draw mode 4 and returns;
+            // no VM/persistent state changes. Canvas owns its draw pipeline.
+            if(originalSystem&&a[0]==12&&a[1]==0&&resources!=null&&resources.profile.id.equals("dc3pp-9872"))return true;
             if(originalSystem&&a[0]>=200&&a[0]<=202){int track=musicRoom.command(a[0],a[1],variables,state);if(track>=0){pendingAudio[0]=resources.named("music",track);musicId=track;audioLoop[0]=false;musicGain=1;musicFadeRemaining=0;}return true;}
             if(originalSystem&&a[0]==100){return true;} // Caller caption remains part of the suspended story snapshot.
             if(originalSystem&&a[0]==18){

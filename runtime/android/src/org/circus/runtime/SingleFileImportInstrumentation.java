@@ -12,7 +12,7 @@ import org.circus.core.*;
 
 /** Actual selected-document reads and production import services, away from user save roots. */
 public final class SingleFileImportInstrumentation extends Instrumentation {
-    private static final String[] IDS={"dcpc-2063","dc2pc-5769","dc2dm-9d72","dc3dd-a5a8",UnityCircusResources.ID};
+    private static final String[] IDS={"dcpc-2063","dc2pc-5769","dc2dm-9d72","dc3dd-a5a8","dc3wy-a09f","dc3pp-9872",UnityCircusResources.ID};
     private static final String DEFAULT_TREE="content://com.android.externalstorage.documents/tree/primary%3ADocuments%2FDC2PC";
     private Bundle args;private int checks;private Path output;private Uri selectedTree;private final StringBuilder log=new StringBuilder();
     private interface Action {void run()throws Exception;}
@@ -27,6 +27,8 @@ public final class SingleFileImportInstrumentation extends Instrumentation {
         else if(id.equals("dc2pc-5769")){bytes[0x70]=1;bytes[0xd4+7]=1;bytes[0x6b0+8]=1;}
         else if(id.equals("dc2dm-9d72")){bytes[0xe4]=1;bytes[0x148]=2;bytes[0x17a]=4;bytes[0x210]=8;}
         else if(id.equals("dc3dd-a5a8")){bytes[0xcc+100]=1;bytes[0x174+1]=1;bytes[0x304+2]=1;bytes[0x7b4+3]=1;}
+        else if(id.equals("dc3wy-a09f")){bytes[0xc0+102]=1;bytes[0x168+1]=1;bytes[0x2f8+2]=1;bytes[0x7a8+3]=1;}
+        else if(id.equals("dc3pp-9872")){bytes[0x88]=1;bytes[0xec]=2;bytes[0x107]=4;bytes[0x19d]=8;}
         else throw new IOException("Unknown fixture "+id);
         return bytes;
     }
@@ -53,7 +55,9 @@ public final class SingleFileImportInstrumentation extends Instrumentation {
         log.append("CHECKS ").append(checks).append("\nOUTPUT ").append(output).append('\n');Files.write(output.resolve("result.txt"),log.toString().getBytes("UTF-8"));result.putString("stream",log.toString());finish(-1,result);
     }catch(Throwable failure){log.append("FAIL ").append(failure).append('\n');try{if(output!=null)Files.write(output.resolve("result.txt"),log.toString().getBytes("UTF-8"));}catch(Exception ignored){}result.putString("stream",log.toString());finish(0,result);}}
     private void mes(String id,SelectedSaveFile.Source source,byte[] original)throws Exception{
-        String tree=args.getString("gameTree");if(tree==null)throw new IOException("Specify -e gameTree for MES resource data");GameResources files=new GameResources(new DocumentTree(getTargetContext().getContentResolver(),Uri.parse(tree)));
+        String tree=args.getString("gameTree"),pack=args.getString("pack");if(tree==null&&pack==null)throw new IOException("Specify gameTree or audit pack");
+        Path input=pack==null?null:getTargetContext().getFilesDir().toPath().resolve(pack).normalize();if(input!=null&&!input.startsWith(getTargetContext().getFilesDir().toPath()))throw new IOException("Audit pack escapes app files");
+        GameResources files=new GameResources(pack==null?new DocumentTree(getTargetContext().getContentResolver(),Uri.parse(tree)):RangeStorage.replay(input));
         Profile profile=GameVersion.detect(files).profile();check(id.equals(profile.id),"selected game is independently identified from its resources");CircusResources data=new CircusResources(files,profile);TextCodec codec=GameText.detect(files,profile);
         Path root=output.resolve("phone"),fresh=output.resolve("cancelled");NativeSaveImport.Preview abandoned=NativeSaveImport.prepareFile(data,codec,fresh,source);check(abandoned.additions.total>0&&!Files.exists(fresh),"preparation with no apply leaves phone root absent");
         NativeSaveImport.Preview preview=NativeSaveImport.prepareFile(data,codec,root,source);check(preview.storySlots==0,"single selected document does not scan sibling story slots");

@@ -9,6 +9,7 @@
 
 | 版本 | 安装包 | 内容 |
 |---|---|---|
+| 0.13.14 | `build/distribution/circus-runtime-0.13.14-android-dev.apk` | 增加 W.Y.／P.P. 原版系统进度选文件导入，按各自字节／位图布局合并通关、CG、场景和音乐标记；验证备份、幂等、手机设置／剧情槽保留及原版鉴赏解锁。详见 [说明](ANDROID_01314.md)。 |
 | 0.13.13 | `build/distribution/circus-runtime-0.13.13-android-dev.apk` | 补齐 W.Y.／P.P. 的 Android 入口，支持 `cn_Data` 中文 MES／CRX、GBK 正文／UI 文本和完整文件长度型 CRX，区分回看贴图；两部 Android 启动、正文、立绘、原版菜单存档／恢复、回看通过。详见 [说明](ANDROID_01313.md)。 |
 | 0.13.12 | `build/android/circus-core-debug.apk` | 接入 D.C.III With You（`dc3wy-a09f`）与 D.C.III P.P.（`dc3pp-9872`）：按操作码重编号绑定语义表，场景图面布局（立绘／雾／樱花／擦除遮罩／对话框 UI 面）按版本区分。两部均验证启动、正文、选择、立绘、存读档像素往返。 |
 | 0.13.11 | `build/android/circus-core-debug.apk` | 接入 D.C.II 2006 原版：按钮文字（`0x50`）、资源句柄（`0x24`）、闹钟音床的裸 WAV、缺素材降级。见 [0.13.11 说明](ANDROID_01311.md) |

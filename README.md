@@ -7,7 +7,7 @@
 仓库：[kesmeey/Circus-Engine](https://github.com/kesmeey/Circus-Engine)。
 项目目录与命令行工具仍沿用 `circus-runtime`／`dc_runtime` 命名。
 
-Android 最新版 **0.13.13** 补齐 W.Y.／P.P. 的手机启动入口，并支持本地这两部汉化版的 `cn_Data` 脚本与替换图片。安装包：`build/distribution/circus-runtime-0.13.13-android-dev.apk`，可覆盖安装。操作与验证范围见 [W.Y.／P.P. Android 说明](docs/ANDROID_01313.md)。
+Android 最新版 **0.13.14** 增加 W.Y.／P.P. 原版系统进度导入，直接选择对应的 `system.dat`，合并通关、CG、场景和音乐解锁。安装包：`build/distribution/circus-runtime-0.13.14-android-dev.apk`，可覆盖安装，见 [导入说明](docs/ANDROID_01314.md)。保留 [0.13.13 的 W.Y.／P.P. 手机启动与中文补丁兼容](docs/ANDROID_01313.md)。
 
 ## 现在能玩的游戏
 
@@ -74,7 +74,7 @@ python tools/package_desktop.py --jdk <JDK21> --ffmpeg <ffmpeg.exe> --version 0.
 ## 存档
 
 手机存档不是原 Windows 格式。原版的系统进度（通关、CG、场景解锁）可以导入：
-游戏卡片「更多 → 导入原版进度」，支持 DCPC／DC2（2006）／DC2PC／DC2DM／DC3DD／DC3R。
+游戏卡片「更多 → 导入原版进度」，支持 DCPC／DC2（2006）／DC2PC／DC2DM／DC3DD／DC3WY／DC3PP／DC3R。
 原版剧情槽位目前只有 DC3R 能转换，其余版本只合并系统进度。
 
 ## 已知限制

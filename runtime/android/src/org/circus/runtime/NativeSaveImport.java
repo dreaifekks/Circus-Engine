@@ -14,7 +14,7 @@ final class NativeSaveImport {
     static final class Request {
         final CircusResources data;final TextCodec codec;final Path root,legacyProgress;final List<String> sources;
         Request(CircusResources data,TextCodec codec,Path root,Path legacy)throws IOException{this(data,codec,root,legacy,true);}
-        Request(CircusResources data,TextCodec codec,Path root,Path legacy,boolean requireSource)throws IOException{this.data=data;this.codec=codec;this.root=root;legacyProgress=legacy;sources=NativeProgress.sourcePaths(data.files,data.profileId);if(requireSource&&sources.isEmpty())throw new IOException("未找到原版 system.dat。请保留电脑存档的相对位置，复制到手机游戏目录：AdvData/SaveData、SaveData，或游戏根目录（DC3DD）。");}
+        Request(CircusResources data,TextCodec codec,Path root,Path legacy,boolean requireSource)throws IOException{this.data=data;this.codec=codec;this.root=root;legacyProgress=legacy;sources=NativeProgress.sourcePaths(data.files,data.profileId);if(requireSource&&sources.isEmpty())throw new IOException("未找到原版 system.dat。可返回游戏卡片，选择“导入原版进度（选文件）”直接点选文件。目录查找支持 AdvData/SaveData、SaveData、游戏根目录，以及 W.Y. 的 dc3wy、P.P. 的 dc3pp 文件夹。");}
         Preview prepare(String source)throws IOException{if(!sources.contains(source))throw new IOException("无效的原版进度来源");Preview p=NativeSaveImport.prepare(data,codec,root,source);p.legacyProgress=legacyProgress;requireMigrated(p.directory.resolve("progress.dat"),legacyProgress);return p;}
     }
     static final class Preview {
@@ -40,7 +40,7 @@ final class NativeSaveImport {
     private static Request inspect(Context context,GameLibrary.Entry entry,boolean folderSearch)throws IOException{
         if(!entry.configured)throw new IOException("请先保存此游戏的配置，再导入原版进度");
         if(UnityCircusResources.ID.equals(entry.profile))throw new IOException("DC3R Unity 请使用游戏卡片的“导入原版存档”入口。");
-        if(!NativeProgress.supports(entry.profile))throw new IOException("原版进度导入支持 DCPC、DC2（2006）、DC2PC、DC2DM、DC3DD 的已验证版本；此游戏版本尚未适配");
+        if(!NativeProgress.supports(entry.profile))throw new IOException("原版进度导入支持 DCPC、DC2（2006）、DC2PC、DC2DM、DC3DD、DC3WY、DC3PP 的已验证版本；此游戏版本尚未适配");
         GameResources files=new GameResources(new DocumentTree(context.getContentResolver(),Uri.parse(entry.tree),folderSearch),entry.executable);
         Profile profile=GameVersion.detect(files).profile();if(!profile.id.equals(entry.profile))throw new IOException("游戏目录版本已改变，请重新配置游戏");
         TextCodec codec=GameText.select(files,profile,entry.encoding,entry.configuration);

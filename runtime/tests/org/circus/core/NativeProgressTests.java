@@ -27,8 +27,8 @@ public final class NativeProgressTests {
         if(packed)bytes[offset+index/8]|=(byte)(1<<(index&7));else bytes[offset+index]=1;
     }
     private static void formatAndIdentity()throws Exception{
-        String[] ids={"dcpc-2063","dc2pc-5769","dc2dm-9d72","dc3dd-a5a8"};
-        int[] sizes={1748,3312,15716,21356};
+        String[] ids={"dcpc-2063","dc2pc-5769","dc2dm-9d72","dc3dd-a5a8","dc3wy-a09f","dc3pp-9872"};
+        int[] sizes={1748,3312,15716,21356,19744,15500};
         check(!NativeProgress.supports(null)&&!NativeProgress.supports("dcpc-3d63")&&!NativeProgress.supports("dc3r"),"Unknown/older release IDs never inherit a similar game's native layout");
         reject(()->NativeProgress.fileSize("dcpc"),"Unversioned family ID has no native layout");
         reject(()->NativeProgress.parse(null,new byte[1748]),"Null profile cannot be inferred from file length");
@@ -70,16 +70,18 @@ public final class NativeProgressTests {
         }
     }
     private static void completionAllowlists()throws Exception{
-        String[] ids={"dcpc-2063","dc2pc-5769","dc2dm-9d72","dc3dd-a5a8"};
-        int[] offsets={0x70,0x70,0xe4,0xcc};
+        String[] ids={"dcpc-2063","dc2pc-5769","dc2dm-9d72","dc3dd-a5a8","dc3wy-a09f","dc3pp-9872"};
+        int[] offsets={0x70,0x70,0xe4,0xcc,0xc0,0x88};
         int[][] accepted={
             {0,1,2,3,4,5,6,7,8,9,10,11,12,26,31,32,58,59},
             {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,21,28,29},
             {0,1,2,14,15,20,29,30,31,32},
-            {100,101,102,103,104,105,106,107,110}
+            {100,101,102,103,104,105,106,107,110},
+            {100,101,102,103,104,105,106,110},
+            {0,1,2,3,4,5,28}
         };
         for(int k=0;k<ids.length;k++){
-            String id=ids[k];int size=NativeProgress.fileSize(id),length=k==3?150:100;
+            String id=ids[k];int size=NativeProgress.fileSize(id),length=k==3||k==4?150:100;
             byte[] bytes=new byte[size];Arrays.fill(bytes,offsets[k],offsets[k]+length,(byte)0xee);
             Set<Integer> expected=new HashSet<>();for(int index:accepted[k]){bytes[offsets[k]+index]=1;expected.add(index);}
             NativeProgress p=NativeProgress.parse(id,bytes);NativeProgress.Target t=target(id);
@@ -148,6 +150,10 @@ public final class NativeProgressTests {
         boundariesAndPreservation("dc2pc-5769",3312,0x70,21,0,0xd4,0x6b0,0,1500,1500,false);
         boundariesAndPreservation("dc2dm-9d72",15716,0xe4,14,0x148,0x17a,0x210,400,1200,650,true);
         boundariesAndPreservation("dc3dd-a5a8",21356,0xcc,100,0x174,0x304,0x7b4,400,1200,650,false);
+        boundariesAndPreservation("dc3wy-a09f",19744,0xc0,100,0x168,0x2f8,0x7a8,400,1200,650,false);
+        boundariesAndPreservation("dc3pp-9872",15500,0x88,28,0xec,0x107,0x19d,210,1200,650,true);
+        byte[] wy=new byte[19744];wy[0xc0+101]=(byte)255;NativeProgress.Target wyTarget=target("dc3wy-a09f");wyTarget.write(100,101,2);NativeProgress.parse("dc3wy-a09f",wy).apply(wyTarget);check(wyTarget.read(100,101)==255,"WY route completion counter merges unsigned maximum");
+        byte[] pp=new byte[15500];pp[0xec+26]=(byte)0xfc;check(NativeProgress.parse("dc3pp-9872",pp).source.total==0,"PP music padding bits210..215 are not CG or music unlocks");
         return count;
     }
     public static void main(String[] args)throws Exception{System.out.println("NativeProgressTests: "+run()+" assertions passed");}
