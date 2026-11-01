@@ -70,7 +70,7 @@ python tools/package_desktop.py --jdk <JDK21> --ffmpeg <ffmpeg.exe> --version 0.
 ## 存档
 
 手机存档不是原 Windows 格式。原版的系统进度（通关、CG、场景解锁）可以导入：
-游戏卡片「更多 → 导入原版进度」，支持 DCPC／DC2PC／DC2DM／DC3DD／DC3R。
+游戏卡片「更多 → 导入原版进度」，支持 DCPC／DC2（2006）／DC2PC／DC2DM／DC3DD／DC3R。
 原版剧情槽位目前只有 DC3R 能转换，其余版本只合并系统进度。
 
 ## 已知限制

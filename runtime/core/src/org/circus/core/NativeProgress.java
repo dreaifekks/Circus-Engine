@@ -19,6 +19,12 @@ public final class NativeProgress {
     private static final Layout[] LAYOUTS={
         new Layout("dcpc-2063","DCPC",1748,0x70,0,0xd4,0x2d4,0,512,1024,false,
             new int[]{0,1,2,3,4,5,6,7,8,9,10,11,12,26,31,32,58,59},new int[]{0,1,2,3,4,5,6,7,8,9,10,11,12,26}),
+        // Original D.C.II 2006 loads the whole file into one 2260-byte table at 0x473F78 and reads
+        // bank 97 from +0xD4, bank 98 from +0x4D4 and bank 100 from +0x70 (getter 0x413C09, setter
+        // 0x413C70), so both gallery arrays are 1024 bytes. 0x41D2A3 and 0x41D325 store 1 when a
+        // CG or scene is shown, the same "seen" polarity as P.C.
+        new Layout("dc2-3363","DC2",2260,0x70,0,0xd4,0x4d4,0,1024,1024,false,
+            new int[]{1,2,3,4,5,6,7,59},new int[]{59}),
         new Layout("dc2pc-5769","DC2PC",3312,0x70,0,0xd4,0x6b0,0,1500,1500,false,
             new int[]{0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,21,28,29},new int[0]),
         new Layout("dc2dm-9d72","DC2DM",15716,0xe4,0x148,0x17a,0x210,400,1200,650,true,
@@ -37,7 +43,7 @@ public final class NativeProgress {
     }
     public static boolean storySlot(String id,String source,String path)throws IOException{
         layout(id);String parent=source.substring(0,source.lastIndexOf('/')+1).toLowerCase(Locale.ROOT),p=path.toLowerCase(Locale.ROOT);
-        String prefix=id.equals("dcpc-2063")?"dcpc":id.equals("dc2pc-5769")?"dc2pc":id.equals("dc2dm-9d72")?"dc2dm":"dc3dd";
+        String prefix=id.equals("dcpc-2063")?"dcpc":id.equals("dc2-3363")?"dc2":id.equals("dc2pc-5769")?"dc2pc":id.equals("dc2dm-9d72")?"dc2dm":"dc3dd";
         return p.startsWith(parent)&&p.substring(parent.length()).matches(prefix+"[0-9]+\\.dat");
     }
     public static final class Summary {
