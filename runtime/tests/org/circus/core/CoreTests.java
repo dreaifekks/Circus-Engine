@@ -83,9 +83,16 @@ public final class CoreTests {
         check(resources.archive("assets/sample.crm")==resources.archive("ASSETS/SAMPLE.CRM"),"bounded archive index cache");
         reject(()->resources.read("../outside",10),"portable resource path traversal rejected");
         byte[] corrupt=assets.read("dawn.crx");reject(()->Crx.plain(Arrays.copyOf(corrupt,corrupt.length-5)),"truncated zlib");
+        int sizeAt=20;if(Binary.u16(corrupt,12)>=3)sizeAt+=4+(int)Binary.u32(corrupt,20)*16;
+        byte[] totalSizeCrx=new byte[corrupt.length+4];System.arraycopy(corrupt,0,totalSizeCrx,0,sizeAt);System.arraycopy(corrupt,sizeAt,totalSizeCrx,sizeAt+4,corrupt.length-sizeAt);totalSizeCrx[14]|=16;
+        java.nio.ByteBuffer.wrap(totalSizeCrx).order(java.nio.ByteOrder.LITTLE_ENDIAN).putInt(sizeAt,totalSizeCrx.length);
+        check(Arrays.equals(Crx.plain(corrupt).argb(),Crx.plain(totalSizeCrx).argb()),"translated CRX total-file size header preserves exact pixels");
+        reject(()->Crx.plain(Arrays.copyOf(totalSizeCrx,totalSizeCrx.length-5)),"translated CRX still rejects truncated stream");
         TextCodec mapping=new TextCodec("漢語\uD83D\uDE00","汉文\uD83D\uDE42");
         check(mapping.decode("漢語".getBytes(Binary.SJIS)).equals("汉文")&&mapping.apply("\uD83D\uDE00").equals("\uD83D\uDE42"),"Unicode codepoint character substitution");
         check(new TextCodec("ab","bc").apply("a").equals("b"),"character substitution is not recursive");
+        TextCodec chinese=new TextCodec("","","GBK");check(NativeText.plain("回溯。&f".getBytes(chinese.charset),chinese,"朝仓","清隆",false).equals("回溯。朝仓"),"DD family native prose uses selected GBK encoding and name macros");
+        check(NativeText.plain("a".getBytes("US-ASCII"),new TextCodec("ab","bc","GBK"),"","",false).equals("b"),"native text substitution applies exactly once after decoding");
         reject(()->new TextCodec("aa","bc"),"conflicting character mapping rejected");
         reject(()->new TextCodec("a",""),"mapping length mismatch rejected");
         reject(()->new TextCodec("\uD800","a"),"unpaired surrogate rejected");

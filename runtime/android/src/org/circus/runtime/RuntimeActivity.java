@@ -47,9 +47,9 @@ public final class RuntimeActivity extends Activity {
             if(UnityCircusResources.candidate(resources))engine=new DesktopUnity(new UnityCircusResources(resources),audit);
             else {
             Profile profile=storage instanceof DocumentTree?GameVersionCache.detect((DocumentTree)storage,resources,getCacheDir()):GameVersion.detect(resources).profile();
-            if(!profile.id.equals("dc3dd-a5a8")&&!profile.id.equals("dc2dm-9d72")&&!PcHost.supports(profile))throw new IOException("此版本尚未验证："+profile.id);
+            if(!Dc3Host.supports(profile)&&!profile.id.equals("dc2dm-9d72")&&!PcHost.supports(profile))throw new IOException("此版本尚未验证："+profile.id);
             CircusResources data=new CircusResources(resources,profile);TextCodec codec=GameText.select(resources,profile,getIntent().getStringExtra("encoding"),getIntent().getStringExtra("configuration"));ExecutableData.validate(data,codec);
-            engine=profile.id.equals("dc3dd-a5a8")?new DesktopDd(data,codec,audit):new DesktopLegacy(data,codec,audit);
+            engine=Dc3Host.supports(profile)?new DesktopDd(data,codec,audit):new DesktopLegacy(data,codec,audit);
             }
             if(!audit&&!(engine instanceof DesktopUnity))migratePreviousAndroid();Path automatic=engine.saveDirectory.resolve("mobile-resume.sav");if(resume&&Files.isRegularFile(automatic))engine.restore(automatic);
             String libraryId=getIntent().getStringExtra("library_id");if(!audit&&libraryId!=null)new GameLibrary(this).opened(libraryId);

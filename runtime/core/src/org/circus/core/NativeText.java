@@ -27,7 +27,7 @@ public final class NativeText {
             if(raw[i]==0)throw new IOException("Embedded NUL in decoded native text");
             for(String control:CONTROLS)if(starts(raw,i,control))throw new UnsupportedControl(i,control);
         }
-        String value=TextCodec.cp932(raw);
+        String value=codec.decodeUnmapped(raw);
         // 422567 also rewrites this byte pattern; keeping it as literal text is unsafe.
         int ruby=value.indexOf("｛・");if(ruby>=0)throw new UnsupportedControl(value.substring(0,ruby).getBytes(Binary.SJIS).length,"｛・");
         int replacements=0;

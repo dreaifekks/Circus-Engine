@@ -36,4 +36,20 @@ public final class Dc3Backlog {
         state(ui,1,696,806,186,30,0);state(ui,2,696,806,186,30,0);
         if(history.previewEnabled)for(int s:new int[]{99,1,2}){state(ui,s,884,775,25,24,2);Dc3Ui.Button b=ui.last();b.sprites.get(b.sprites.size()-1).quad.y+=2;}
     }
+    public static void build(Dc3Ui ui,Dc2History history,String profile)throws IOException{
+        build(ui,history);boolean pp=profile.equals("dc3pp-9872"),wy=profile.equals("dc3wy-a09f");if(!pp&&!wy)return;
+        // Earlier atlases use different crop rectangles (and P.P. underscored names).
+        // Never feed the later D.D. portrait/button rectangles into this texture.
+        history.previewEnabled=false;
+        ui.current.buttons.removeIf(b->b.action.equals("@log:preview"));
+        for(Dc3Scene.Quad q:ui.current.quads){if(q.resource.equals("SYSTEM/LOGBACK")){if(pp)q.resource="SYSTEM/LOG_BACK";}
+            else{q.resource=pp?"SYSTEM/LOG_CHIP":"SYSTEM/LOGCHIP";if(q.sx==0&&q.sy==0){q.sx=pp?228:0;q.width=677;q.height=123;}else if(q.sx==943||q.sx==820){q.sx=pp?989:820;q.sy=pp?0:4;q.width=pp?30:35;q.height=332;}else{q.sx=pp?908:680;q.sy=75;q.width=q.height=31;}}
+        }
+        for(Dc3Ui.Button b:ui.current.buttons)for(Dc3Ui.Sprite s:b.sprites){Dc3Scene.Quad q=s.quad;q.resource=pp?"SYSTEM/LOG_CHIP":"SYSTEM/LOGCHIP";
+            if(b.action.equals("@log:exit")){q.sx=pp?0:s.state==99?0:110;q.sy=pp?(s.state==99?0:67):600;q.width=pp?82:92;q.height=pp?66:50;}
+            else if(b.action.startsWith("@log:voice:")){q.sx=pp?83:696;q.sy=pp?120:s.state==99?132:164;q.width=pp?25:100;q.height=pp?25:31;}
+            else if(b.action.equals("@log:first")||b.action.equals("@log:up")){q.sx=pp?907:680;q.sy=s.state==99?0:24;q.width=40;q.height=23;}
+            else if(b.action.equals("@log:last")||b.action.equals("@log:down")){q.sx=pp?948:720;q.sy=s.state==99?0:24;q.width=40;q.height=23;}
+        }
+    }
 }

@@ -22,8 +22,7 @@ public final class DesktopRuntime implements AutoCloseable {
         CircusResources resources=new CircusResources(files,version.profile());TextCodec codec=GameText.detect(files,version.profile());
         // D.C.III D.D. / With You / P.P. share one host; only the opcode numbering and the
         // resource layout move between them, and both are carried by the profile.
-        if(version.profileId.equals("dc3dd-a5a8")||version.profileId.equals("dc3wy-a09f")
-                ||version.profileId.equals("dc3pp-9872"))engine=new DesktopDd(resources,codec,audit);
+        if(Dc3Host.supports(version.profile()))engine=new DesktopDd(resources,codec,audit);
         else if(version.profileId.equals("dc2dm-9d72")||PcHost.supports(version.profile()))engine=new DesktopLegacy(resources,codec,audit);
         else throw new IOException("Unsupported profile "+version.profileId);
         }

@@ -21,6 +21,11 @@ public class CircusResources {
     }
     private static String extension(String path,String ext){return path.toLowerCase(Locale.ROOT).endsWith(ext.toLowerCase(Locale.ROOT))?path:path+ext;}
     private static String basename(String path){int slash=Math.max(path.lastIndexOf('/'),path.lastIndexOf('\\'));return path.substring(slash+1);}
+    /** The verified W.Y./P.P. translation uses loose files before original data. */
+    private String loosePatch(String name){
+        if(!profile.id.equals("dc3wy-a09f")&&!profile.id.equals("dc3pp-9872"))return null;
+        String path="cn_Data/"+basename(name);return files.paths().contains(path.toLowerCase(Locale.ROOT))?path:null;
+    }
     /** DM 428990: an accessory follows its actor's close-up variant and color filter.
      * Resolve at presentation time so old saves/captures and a retained accessory also
      * follow a later actor change. Never rewrite the MES reference or archive name. */
@@ -57,6 +62,7 @@ public class CircusResources {
         String[] parts=reference.split(",",-1);if(parts.length>2)throw new IOException("Unsupported image reference "+reference);
         int end=parts[0].toLowerCase(Locale.ROOT).endsWith(".crx")?parts[0].length()-4:parts[0].length();char filter=end==0?0:parts[0].charAt(end-1);
         if(filter=='@'||filter=='*'){if(!Dc3Host.supports(profile)&&!profile.id.equals("dc2dm-9d72")&&!PcHost.supports(profile))throw new IOException("Unverified image filter for "+profile.id);parts[0]=parts[0].substring(0,end-1)+parts[0].substring(end);}else filter=0;
+        String patch=loosePatch(extension(Binary.safePath(parts[0]),".CRX"));if(patch!=null)return tint(files.image(patch),filter);
         if(parts.length==1){String file="AdvData/GRP/"+extension(Binary.safePath(parts[0]),".CRX");return tint(PcHost.supports(profile)?Crx.plain(files.read(file,128*1024*1024),true):files.image(file),filter,profile.id.equals("dc2pc-5769")?2:profile.id.equals("dcpc-2063")?1:0);}
         String archive="AdvData/GRP/"+extension(Binary.safePath(parts[1]),".CRM");
         String entry=extension(basename(Binary.safePath(parts[0])),".CRX");
@@ -109,5 +115,8 @@ public class CircusResources {
         }
         Xpcm.write(files.source("AdvData/"+extension(path,".PCM")),out);
     }
-    public MesVm.Library scripts()throws IOException{return files.scripts("AdvData/MES",profile);}
+    public MesVm.Library scripts()throws IOException{
+        MesVm.Library original=files.scripts("AdvData/MES",profile);
+        return name->{String patch=loosePatch(extension(Binary.safePath(name),".mes"));return patch==null?original.script(name):new MesScript(name,files.read(patch,64*1024*1024),profile);};
+    }
 }

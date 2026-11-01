@@ -47,7 +47,12 @@ public final class Crx {
         int bpp=depth==0?24:depth==1?32:8,ps=bpp/8,stride=(w*ps+3)&~3,p=20;int[] palette=null;
         if(bpp==8){int colors=Math.min(depth,256),entryBytes=depth==258?4:3;if(colors<=0)throw new IOException("Invalid palette");palette=new int[256];Binary.range(p,colors*entryBytes,data.length);for(int i=0;i<colors;i++){int r=data[p]&255,g=data[p+1]&255,b=data[p+2]&255;if(r==255&&g==0&&b==255)g=255;palette[i]=0xff000000|r<<16|g<<8|b;p+=entryBytes;}}
         if(comp>=3){long count=Binary.u32(data,p);p+=4;Binary.range(p,count*16,data.length);p+=(int)(count*16);}
-        if((flags&16)!=0){long size=Binary.u32(data,p);p+=4;Binary.range(p,size,data.length);}
+        if((flags&16)!=0){long size=Binary.u32(data,p);p+=4;
+            // Loose W.Y./P.P. translation images put the complete file length
+            // here. Original encoders put the compressed payload length here.
+            // Both still pass the full predictor/zlib integrity checks below.
+            if(size!=data.length)Binary.range(p,size,data.length);
+        }
         byte[] output=new byte[h*stride];
         if(comp==1)unpackLz(data,p,output);
         else try(DataInputStream in=new DataInputStream(new BufferedInputStream(new InflaterInputStream(new ByteArrayInputStream(data,p,data.length-p)),65536))){

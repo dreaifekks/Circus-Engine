@@ -41,7 +41,7 @@ public final class DesktopDd extends DesktopEngine {
         else if(host.choosing()){Dc3Ui.Panel p=host.ui.templates[11];if(p!=null)for(int n=0;n<host.choices().size()&&n+1<p.buttons.size();n++){Dc3Ui.Button b=p.buttons.get(n+1);r.add(new Control("@choice:"+n,b.left,b.top,b.right,b.bottom));}}
         else if(textWaiting()&&!hidden){Dc3Ui.Panel p=host.ui.templates[10];if(p!=null)for(Dc3Ui.Button b:p.buttons)if(!b.action.isEmpty())r.add(new Control(b.action,b.left,b.top,b.right,b.bottom));}return r;
     }
-    public void scroll(int units)throws IOException{if(host.history.active){host.history.scroll(units);Dc3Backlog.build(host.ui,host.history);return;}if(host.ui.gridWaiting&&host.list.active())host.write(99,246,host.list.clamp(host.read(99,246)+units*host.list.columns,host.ui.grid.size()));if(host.ui.gridWaiting&&!host.ui.actions[15].isEmpty())vm.activateMenu(ticket(),-15);}
+    public void scroll(int units)throws IOException{if(host.history.active){host.history.scroll(units);Dc3Backlog.build(host.ui,host.history,resources.profile.id);return;}if(host.ui.gridWaiting&&host.list.active())host.write(99,246,host.list.clamp(host.read(99,246)+units*host.list.columns,host.ui.grid.size()));if(host.ui.gridWaiting&&!host.ui.actions[15].isEmpty())vm.activateMenu(ticket(),-15);}
     public void click(int x,int y,boolean right)throws Exception{
         if(hidden){hidden=false;return;}if(!right&&drag(x,y,true)){endDrag();return;}
         if(right&&host.hasTimedInput()&&!host.ui.actions[3].isEmpty()){vm.activateMenu(ticket(),-1);return;}
@@ -51,7 +51,7 @@ public final class DesktopDd extends DesktopEngine {
     }
     public boolean drag(int x,int y,boolean begin)throws Exception{
         if(begin){dragged=null;dragKind=0;if(!host.ui.waiting)return false;if(host.history.active&&host.history.entries.size()>4&&x>=940&&x<980&&y>=76&&y<416)dragKind=1;else if(host.ui.gridWaiting&&host.list.active()&&x>=host.ui.gridBounds[0]-4&&x<host.ui.gridBounds[2]+4&&y>=host.ui.gridBounds[1]&&y<host.ui.gridBounds[3])dragKind=2;else for(Dc3Ui.Button b:host.ui.current.buttons)if(b.contains(x,y))for(Dc3Ui.Sprite s:b.sprites)if(s.state==5)dragged=b;}
-        if(dragKind==1){int max=Math.max(0,host.history.entries.size()-4);host.history.cursor=Math.max(0,Math.min(max,(int)Math.round((y-80)*max/332.0)));Dc3Backlog.build(host.ui,host.history);return true;}
+        if(dragKind==1){int max=Math.max(0,host.history.entries.size()-4);host.history.cursor=Math.max(0,Math.min(max,(int)Math.round((y-80)*max/332.0)));Dc3Backlog.build(host.ui,host.history,resources.profile.id);return true;}
         if(dragKind==2){int[] b=host.ui.gridBounds;int cy=Math.max(b[1],Math.min(b[3]-1,y));host.write(99,246,y>=b[3]?host.list.clamp(Integer.MAX_VALUE,host.ui.grid.size()):host.list.scrollAt((b[0]+b[2])/2,cy,b,host.read(99,246),host.ui.grid.size()));return true;}
         if(dragged==null)return false;for(Dc3Ui.Sprite s:dragged.sprites)if(s.state==5){Dc3Scene.Quad q=s.quad;int value=(int)Math.round(Math.max(0,Math.min(1,(x-q.x)/(double)Math.max(1,q.y-q.x)))*Math.max(0,q.sx-1));vm.variables.write(q.sy,q.width,value);if(q.sy==99&&q.width==189)vm.variables.write(99,187,value);}return true;
     }
@@ -61,7 +61,7 @@ public final class DesktopDd extends DesktopEngine {
     public void action(String a)throws IOException{switch(a){case ":auto":auto=!auto;return;case ":rapid":rapid=!rapid;return;case ":close":case ":clear":hidden=true;return;case ":full":fullscreenRequested=!fullscreenRequested;return;case ":qsave":case ":qs":save(slot(1));scanSaves();return;case ":qload":case ":ql":if(Files.exists(slot(1)))restore(slot(1));return;
         case ":menu":case ":option":case ":backlog":case ":save":case ":load":case ":torisetu":
             if(caller!=null)throw new IOException("Nested system caller");if(!textWaiting())return;
-            vm.signalHost(ticket(),MesVm.HostSignal.TEXT_COMPLETE);vm.run(1000);caller=vm.snapshot();beginSystemAudio();host.enterSystem();if(a.equals(":backlog")){host.history.open();Dc3Backlog.build(host.ui,host.history);auto=rapid=false;return;}vm.enterSystem(a.equals(":menu")?"ADVMENU":a.equals(":option")?"CONFIG":a.equals(":backlog")?"LOG":a.equals(":torisetu")?"MANUAL":a.substring(1).toUpperCase(Locale.ROOT));auto=rapid=false;return;
+            vm.signalHost(ticket(),MesVm.HostSignal.TEXT_COMPLETE);vm.run(1000);caller=vm.snapshot();beginSystemAudio();host.enterSystem();if(a.equals(":backlog")){host.history.open();Dc3Backlog.build(host.ui,host.history,resources.profile.id);auto=rapid=false;return;}vm.enterSystem(a.equals(":menu")?"ADVMENU":a.equals(":option")?"CONFIG":a.equals(":backlog")?"LOG":a.equals(":torisetu")?"MANUAL":a.substring(1).toUpperCase(Locale.ROOT));auto=rapid=false;return;
         default:throw new IOException("DD original system service pending: "+a);}}
     private int hit(int x,int y){for(int n=host.ui.current.buttons.size()-1;n>=0;n--){Dc3Ui.Button b=host.ui.current.buttons.get(n);if(b.contains(x,y)){if(!b.action.isEmpty())return n;for(Dc3Ui.Sprite s:b.sprites)if(s.state==5)return n;}}return -1;}
     public void hover(int x,int y)throws IOException{historyHover=host.history.active&&x>=206&&x<885&&y>=44&&y<564?(y-44)/130:-1;if(host.ui.waiting)host.hoverMenu(hit(x,y));hovered=-1;List<Control> bs=controls();for(int n=0;n<bs.size();n++)if(bs.get(n).contains(x,y))hovered=n;}
@@ -156,7 +156,7 @@ public final class DesktopDd extends DesktopEngine {
     public String body(){return host.dialogue.shownText;}
     public boolean textWaiting(){return host.dialogue.waiting();}
     public boolean menuWaiting(){return host.ui.waiting||host.choosing();}
-    public boolean actorVisible(){for(int n=4;n<=13;n++)if(!host.scene.slots[n].resource.isEmpty())return true;return false;}
+    public boolean actorVisible(){Dc3Layout layout=host.layout();for(int n=layout.spriteFirst;n<layout.spriteFirst+2*layout.spriteCount;n++)if(!host.scene.slots[n].resource.isEmpty())return true;return false;}
     public boolean exitRequested(){return host.exitRequested;}
     public long ticket(){return host.waitTicket();}
     public String movie(){return host.movie;}

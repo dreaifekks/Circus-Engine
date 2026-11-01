@@ -42,7 +42,10 @@ public final class TextCodec {
         catch(CharacterCodingException e){throw new IOException("Invalid CP932 text",e);}
     }
     public String decode(byte[] bytes)throws IOException{
-        try{return apply(charset.newDecoder().onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString());}
+        return apply(decodeUnmapped(bytes));
+    }
+    public String decodeUnmapped(byte[] bytes)throws IOException{
+        try{return charset.newDecoder().onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString();}
         catch(CharacterCodingException e){throw new IOException("Invalid "+charset.name()+" text",e);}
     }
     public String apply(String value){

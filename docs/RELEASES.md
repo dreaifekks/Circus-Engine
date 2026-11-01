@@ -9,6 +9,7 @@
 
 | 版本 | 安装包 | 内容 |
 |---|---|---|
+| 0.13.13 | `build/distribution/circus-runtime-0.13.13-android-dev.apk` | 补齐 W.Y.／P.P. 的 Android 入口，支持 `cn_Data` 中文 MES／CRX、GBK 正文／UI 文本和完整文件长度型 CRX，区分回看贴图；两部 Android 启动、正文、立绘、原版菜单存档／恢复、回看通过。详见 [说明](ANDROID_01313.md)。 |
 | 0.13.12 | `build/android/circus-core-debug.apk` | 接入 D.C.III With You（`dc3wy-a09f`）与 D.C.III P.P.（`dc3pp-9872`）：按操作码重编号绑定语义表，场景图面布局（立绘／雾／樱花／擦除遮罩／对话框 UI 面）按版本区分。两部均验证启动、正文、选择、立绘、存读档像素往返。 |
 | 0.13.11 | `build/android/circus-core-debug.apk` | 接入 D.C.II 2006 原版：按钮文字（`0x50`）、资源句柄（`0x24`）、闹钟音床的裸 WAV、缺素材降级。见 [0.13.11 说明](ANDROID_01311.md) |
 | 0.13.10 | `build/distribution/circus-runtime-0.13.10-android-dev.apk` | DC3R Unity 菜单与存档优化：保存只更新当前槽位，菜单贴图共用文件句柄，缩小暂存预览图。长历史／102 槽保存由约 1.16 秒降至 49 毫秒；原画面与旧存档兼容。见 [说明](ANDROID_01310.md) |

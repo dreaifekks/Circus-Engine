@@ -7,6 +7,8 @@
 仓库：[kesmeey/Circus-Engine](https://github.com/kesmeey/Circus-Engine)。
 项目目录与命令行工具仍沿用 `circus-runtime`／`dc_runtime` 命名。
 
+Android 最新版 **0.13.13** 补齐 W.Y.／P.P. 的手机启动入口，并支持本地这两部汉化版的 `cn_Data` 脚本与替换图片。安装包：`build/distribution/circus-runtime-0.13.13-android-dev.apk`，可覆盖安装。操作与验证范围见 [W.Y.／P.P. Android 说明](docs/ANDROID_01313.md)。
+
 ## 现在能玩的游戏
 
 有独立宿主、由原版脚本驱动的一共 8 个入口。Windows 包和 Android APK 用的是同一份核心，
