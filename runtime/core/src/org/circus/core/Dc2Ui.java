@@ -28,6 +28,8 @@ public final class Dc2Ui {
     public final List<List<Button>> buttonTemplates=new ArrayList<>();
     public final String[] actions=new String[15];
     public final int[] palette=new int[64];
+    /** Pending draw-list capacity. DM/PC cap at 30; D.C.II 416151 accepts 60 (cmp eax,0x3c). */
+    public int quadLimit=30;
     public int x,y,sourceX,sourceY,layout,binding,hovered=-1,pressed=-1;
     public boolean waiting;public String version="";
     public Dc2Ui(){for(int n=0;n<14;n++)quadTemplates.add(new ArrayList<Quad>());for(int n=0;n<9;n++)buttonTemplates.add(new ArrayList<Button>());Arrays.fill(actions,"");Arrays.fill(palette,0xffffffff);}
@@ -58,15 +60,15 @@ public final class Dc2Ui {
         if(a.length!=8)throw new IOException("DM quad requires extension");Quad q=new Quad();q.x=a[0]+x;q.y=a[1]+y;q.sx=a[2];q.sy=a[3];q.width=a[4];q.height=a[5];q.flags=a[6];q.state=a[7];
         if(!sprite){if(q.sx<0x4000){q.sx+=sourceX;q.sy+=sourceY;}q.type=(q.flags&0x40)!=0?1:0;if((q.flags&0x100)!=0)q.type=7;if((q.flags&0x200)!=0)q.type=8;}
         if(sprite){Button b=last();if(b.sprites.size()>=14)throw new IOException("DM sprite limit");if(q.state==5)b.flags|=4;b.sprites.add(q);}
-        else{if(quads.size()>=30)throw new IOException("DM quad limit");q.binding=binding;binding=0;quads.add(q);}return q;
+        else{if(quads.size()>=quadLimit)throw new IOException("DM quad limit");q.binding=binding;binding=0;quads.add(q);}return q;
     }
     public void text(int[] a,byte[] raw,boolean sprite)throws IOException{
         Quad q=new Quad();q.x=a[0];q.y=a[1];q.text=TextCodec.cp932(raw);q.type=2;q.width=a[2];q.height=a[3];q.binding=binding;binding=0;
         if(sprite){q.x+=x;q.y+=y;q.flags=a[2];q.state=a[3];q.width=raw.length*11+1;q.height=23;if(last().sprites.size()>=14)throw new IOException("DM text sprite limit");last().sprites.add(q);}
-        else{if(quads.size()>=30)throw new IOException("DM text quad limit");quads.add(q);}
+        else{if(quads.size()>=quadLimit)throw new IOException("DM text quad limit");quads.add(q);}
     }
     public int hit(int px,int py){for(int n=buttons.size()-1;n>=0;n--){Button b=buttons.get(n);if(!b.action.isEmpty()&&px>=b.left&&px<b.right&&py>=b.top&&py<b.bottom)return n;}return -1;}
-    static List<Quad> copyQuads(List<Quad> src)throws IOException{ByteArrayOutputStream b=new ByteArrayOutputStream();saveQuads(new DataOutputStream(b),src);return loadQuads(new DataInputStream(new ByteArrayInputStream(b.toByteArray())),30);}
+    static List<Quad> copyQuads(List<Quad> src)throws IOException{ByteArrayOutputStream b=new ByteArrayOutputStream();saveQuads(new DataOutputStream(b),src);return loadQuads(new DataInputStream(new ByteArrayInputStream(b.toByteArray())),2048);}
     static List<Button> copyButtons(List<Button> src)throws IOException{ByteArrayOutputStream b=new ByteArrayOutputStream();saveButtons(new DataOutputStream(b),src);return loadButtons(new DataInputStream(new ByteArrayInputStream(b.toByteArray())));}
     private static int count(DataInput i,int max)throws IOException{int n=i.readInt();if(n<0||n>max)throw new IOException("DM UI count");return n;}
     static void saveQuads(DataOutput o,List<Quad> list)throws IOException{o.writeInt(list.size());for(Quad q:list)q.save(o);}
@@ -74,5 +76,5 @@ public final class Dc2Ui {
     static void saveButtons(DataOutput o,List<Button> list)throws IOException{o.writeInt(list.size());for(Button b:list)b.save(o);}
     static List<Button> loadButtons(DataInput i)throws IOException{List<Button> list=new ArrayList<>();for(int n=count(i,50);n>0;n--)list.add(Button.load(i));return list;}
     public void save(DataOutput o)throws IOException{o.writeInt(0x444d5531);for(int v:new int[]{x,y,sourceX,sourceY,layout,binding,hovered,pressed})o.writeInt(v);o.writeBoolean(waiting);o.writeUTF(version);for(String a:actions)o.writeUTF(a);for(int c:palette)o.writeInt(c);saveQuads(o,quads);saveButtons(o,buttons);for(List<Quad> t:quadTemplates)saveQuads(o,t);for(List<Button> t:buttonTemplates)saveButtons(o,t);}
-    public void load(DataInput i)throws IOException{if(i.readInt()!=0x444d5531)throw new IOException("DM UI format");x=i.readInt();y=i.readInt();sourceX=i.readInt();sourceY=i.readInt();layout=i.readInt();binding=i.readInt();hovered=i.readInt();pressed=i.readInt();waiting=i.readBoolean();version=i.readUTF();for(int n=0;n<actions.length;n++)actions[n]=i.readUTF();for(int n=0;n<64;n++)palette[n]=i.readInt();quads.clear();quads.addAll(loadQuads(i,30));buttons.clear();buttons.addAll(loadButtons(i));for(List<Quad> t:quadTemplates){t.clear();t.addAll(loadQuads(i,30));}for(List<Button> t:buttonTemplates){t.clear();t.addAll(loadButtons(i));}}
+    public void load(DataInput i)throws IOException{if(i.readInt()!=0x444d5531)throw new IOException("DM UI format");x=i.readInt();y=i.readInt();sourceX=i.readInt();sourceY=i.readInt();layout=i.readInt();binding=i.readInt();hovered=i.readInt();pressed=i.readInt();waiting=i.readBoolean();version=i.readUTF();for(int n=0;n<actions.length;n++)actions[n]=i.readUTF();for(int n=0;n<64;n++)palette[n]=i.readInt();quads.clear();quads.addAll(loadQuads(i,2048));buttons.clear();buttons.addAll(loadButtons(i));for(List<Quad> t:quadTemplates){t.clear();t.addAll(loadQuads(i,30));}for(List<Button> t:buttonTemplates){t.clear();t.addAll(loadButtons(i));}}
 }

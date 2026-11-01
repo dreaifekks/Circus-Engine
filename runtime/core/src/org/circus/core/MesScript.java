@@ -25,17 +25,22 @@ public final class MesScript {
         long count=Binary.u32(data,0);if(count>1000000)throw new IOException("MES header count limit");
         long vo=4+count*profile.headerStride;Binary.range(vo,profile.versionBytes,data.length);versionOffset=(int)vo;
         int ver=profile.versionBytes==1?Binary.u8(data,versionOffset):Binary.u16(data,versionOffset);
-        if(ver!=profile.version)throw new IOException("MES version does not match "+profile.id);
+        if(!profile.acceptsVersion(ver))throw new IOException("MES version does not match "+profile.id);
         headerOffsets=new long[(int)count];headerMetadata=new int[(int)count];
         for(int i=0;i<count;i++){headerOffsets[i]=Binary.u32(data,4+4*i);if(profile.headerStride==6)headerMetadata[i]=Binary.u16(data,4+(int)count*4+2*i);}
         firstOffset=versionOffset+profile.versionBytes;
-        for(int p=firstOffset;p<data.length;){Record r=decode(p);records.put(p,r);if(r.opcode==profile.label)labels.putIfAbsent(Binary.hex(r.bytes),p);p=r.end;
+        for(int p=firstOffset;p<data.length;){
+            // 758 of the 938 local D.C.II scripts end with a two-byte 00 00 trailer that is not a
+            // record; the remaining 180 end flush. Nothing else in the corpus is shorter than 3.
+            if(profile.id.equals("dc2-3363")&&data.length-p<=2&&zeroBytes(data,p))break;
+            Record r=decode(p);records.put(p,r);if(r.opcode==profile.label)labels.putIfAbsent(Binary.hex(r.bytes),p);p=r.end;
             if(profile.id.equals("dcpc-2063")&&r.opcode==0)break; // 41265F terminates; bytes beyond stop are not instructions.
             // These two PC2 scripts contain the literal trailer 61 64 after their terminal stop.
             if(profile.id.equals("dc2pc-5769")&&r.opcode==0&&data.length-p==2&&data[p]==0x61&&data[p+1]==0x64)break;
         }
         if(records.isEmpty())throw new IOException("Empty MES code");
     }
+    private static boolean zeroBytes(byte[] data,int from){for(int i=from;i<data.length;i++)if(data[i]!=0)return false;return true;}
     private Record decode(int p)throws IOException {
         int op=Binary.u8(data,p),end;int[] a=new int[0];byte[] bytes=new byte[0];
         // 4125F4 movsx + 412618 signed compare: high-bit opcodes consume two bytes,

@@ -1044,6 +1044,43 @@
       "title": "D.C.P.C. DVD (local 63 20)",
       "evidence": "DCPCDVD.EXE 41172D..411751; 960 local scripts",
       "execution_supported": false
+    },
+    {
+      "id": "dc2-3363",
+      "alias": "dc2",
+      "layout": "offset1",
+      "version": 13155,
+      "ranges": [
+        [
+          "u8x2",
+          0,
+          43
+        ],
+        [
+          "string",
+          44,
+          72
+        ],
+        [
+          "encoded_string",
+          73,
+          76
+        ],
+        [
+          "u16x4",
+          77,
+          255
+        ]
+      ],
+      "string_key": 32,
+      "plain_text_opcodes": [],
+      "title": "D.C.II ～ダ・カーポII～ (2006 原版)",
+      "evidence": "DC2.OLD dispatch @4179A8 (entry 414797): cmp eax,2Ch / 49h split; 4148A3 add cl,20h for 49h-4Ch; 4148D4 reads four i16 at 4Dh+; 938 local scripts all marker 33 63; alt stamps 1Ah63 (kaiso_menu.mes) and 31h63 (title.mes) decode to flush end under the same layout and start.mes repeats kaiso_menu's 4Eh/3Ah/4Fh/51h sequence; text is GBK stored at -20h inside the 49h-4Ch encoded_string range, verified on 104998 records",
+      "execution_supported": false,
+      "alt_versions": [
+        6755,
+        12643
+      ]
     }
   ]
 }

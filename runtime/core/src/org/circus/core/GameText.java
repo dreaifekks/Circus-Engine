@@ -6,6 +6,8 @@ public final class GameText {
     public static TextCodec detect(GameResources files,Profile profile)throws IOException{
         String name,hash;
         if(profile.id.equals("dc2pc-5769")){name="fst_1216_a1_cmn";hash="7fbc02bc2b9634d376c7771c43c2d7c8e12ce46311347316353b5db7f87feabd";}
+        // D.C.II (2006) ships Shift_JIS prose; the 蘑菇 V9.9 patch rewrites the same script verbatim in GBK.
+        else if(profile.id.equals("dc2-3363")){name="fst_1216_a1_cmn";hash="780e8c2ec5fadae3c9cc61364e92aad7cc14d8d50c1d9cd23f187ae86f613e46";}
         else if(profile.id.equals("dcpc-2063")){name="0223A_F01";hash="69b250bc06c5150cba7d925920523adb14124d95d41f5dc2407d500d45036df1";}
         else return configuration(files);
         try{if(Binary.sha256(files.read("AdvData/MES/"+name+".mes",2*1024*1024)).equals(hash))return new TextCodec("","","GBK");}catch(FileNotFoundException absent){}

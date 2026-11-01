@@ -22,6 +22,8 @@ def generate():
         stride=6 if f['layout']=='offset2' else 4
         marker=s['decoder'].get('version_bytes',3 if stride==6 else 2)
         fields=[json.dumps(pid),str(f['version']),str(stride),str(marker),str(starts.get('u8str',starts['string'])),str(starts['string']),str(starts['encoded_string']),str(starts['u16x4']),str(s['decoder']['extension_opcode']),str(c['label_opcode']),str(c['block_marker_opcode']),str(c['companion_opcode']),str(c['block_scan_signed_opcode']).lower(),str(mapping == {'36':32}).lower(),str(mapping is not None).lower(),'false','Variables.Model.'+model,'ops']
+        alt = f.get('alt_versions')
+        if alt: fields.append('new int[]{'+','.join(str(x) for x in alt)+'}')
         lines += ['return new Profile('+','.join(fields)+');','}']
     lines += ['if(id.equals("circus-demo-v1")) {',
               'Profile dd=get("dc3dd-a5a8"); for(int i=0;i<256;i++)if(!dd.operation(i).equals("unknown"))ops.put(i,dd.operation(i));',
@@ -35,7 +37,10 @@ def generate():
              'final class MesFormats {', 'static final class Format { final String id; final int version,stride;',
              'Format(String id,int version,int stride){this.id=id;this.version=version;this.stride=stride;} }',
              'static final Format[] ALL={']
-    for pid,f in framing.items(): formats.append('new Format('+json.dumps(pid)+','+str(f['version'])+','+('6' if f['layout']=='offset2' else '4')+'),')
+    for pid,f in framing.items():
+        stride='6' if f['layout']=='offset2' else '4'
+        for v in [f['version']]+list(f.get('alt_versions') or []):
+            formats.append('new Format('+json.dumps(pid)+','+str(v)+','+stride+'),')
     formats+=['};','private MesFormats(){}','}']
     (target.parent/'MesFormats.java').write_text('\n'.join(formats)+'\n',encoding='utf-8')
 

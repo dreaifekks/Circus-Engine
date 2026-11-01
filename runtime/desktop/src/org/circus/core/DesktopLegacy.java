@@ -18,6 +18,8 @@ public final class DesktopLegacy extends DesktopEngine {
     private final Map<String,Picture> images=new LinkedHashMap<String,Picture>(32,.75f,true){protected boolean removeEldestEntry(Map.Entry<String,Picture> e){return size()>48;}};
     private final DesktopCaptures captures;private SceneCaptures.Legacy captureState;
     private long textClock,textTicket=-1;
+    /** Newest story line; the system menu clears {@code body}, so a save made from SAVE.mes still needs it. */
+    private String lastLine="";
     private int savedAutoGeneration;
     public int hovered=-1;
     public String problem="";
@@ -41,6 +43,7 @@ public final class DesktopLegacy extends DesktopEngine {
         if(h.returnRequested){session.returnToStory();finishSystemAudio();h=host();}
         MesVm.Status status=session.vm.run(1000);if(status==MesVm.Status.FAULT)throw new IOException(session.vm.error());session.observeTransfer();if(h.windowRequest>=0){fullscreenRequested=h.windowRequest!=0;h.windowRequest=-1;}
         session.captureHistory();
+        if(!session.inSystem()&&!h.body.isEmpty())lastLine=h.body;
         if(!session.inSystem()&&(h.textWaiting||h.presentationWaiting)&&!h.history.entries.isEmpty()){Dc2History.Entry entry=h.history.entries.get(h.history.entries.size()-1);if(entry.scene.length==0){ByteArrayOutputStream b=new ByteArrayOutputStream();h.scene.shown.save(new DataOutputStream(b));entry.scene=b.toByteArray();}}
         if(openPendingSystem())return;
         if(h.history.rewindRequest>=0){session.rewindHistory(h.history.rewindRequest);auto=rapid=false;}
@@ -145,7 +148,7 @@ public final class DesktopLegacy extends DesktopEngine {
     private void writeSlot(int n)throws IOException{save(slot(n));scanSaves();persist();}
     private void readSlot(int n)throws IOException{restore(slot(n));}
     private void scanSaves()throws IOException{host().availableSaves.clear();host().saveLabels.clear();thumbnails.clear();for(int n=0;n<256;n++)if(Files.exists(slot(n))){host().availableSaves.add(n);host().saveLabels.put(n,new java.text.SimpleDateFormat("MM/dd HH:mm").format(new Date(Files.getLastModifiedTime(slot(n)).toMillis())));scanThumbnail(n,slot(n));}}
-    public String saveCaption(){return host().checkpointLabel.isEmpty()?body():codec.apply(host().checkpointLabel);}
+    public String saveCaption(){return host().checkpointLabel.isEmpty()?(body().isEmpty()?lastLine:body()):codec.apply(host().checkpointLabel);}
     public BufferedImage preview()throws IOException{BufferedImage image=new BufferedImage(width,height,BufferedImage.TYPE_INT_RGB);Graphics2D g=image.createGraphics();try{scene(g,host().systemScene!=null?host().systemScene:host().scene.shown);}finally{g.dispose();}return image;}
     public void persist()throws IOException{if(audit)return;ByteArrayOutputStream b=new ByteArrayOutputStream();host().savePersistent(new DataOutputStream(b));atomic(saveDirectory.resolve("progress.dat"),b.toByteArray());}
     private Picture picture(String name)throws IOException {if(name==null||name.isEmpty())return null;if(name.equals("@ui-capture"))return new Picture(captures.resolve(host().uiCapture));Picture p=images.get(name);if(p==null){p=new Picture(resources.image(name));images.put(name,p);loadedImages.add(name);}return p;}
@@ -274,7 +277,7 @@ public final class DesktopLegacy extends DesktopEngine {
             int sy=h.second?(slot==0?0:slot==1?(h.saveGrid?72:216):144):(h.saveGrid?0:72);
             if(!h.second&&slot<2)sx=0;
             g.drawImage(p.image,b.left,b.top,b.right,b.bottom,sx,sy,sx+288,sy+72,null);
-            DesktopSave meta=metadata(slot(slot));if(meta!=null&&slot>=2&&meta.icon>=0&&meta.icon<=(h.second?16:17)){int sxIcon=h.second?meta.icon*56:meta.icon%6*56,syIcon=h.second?312:meta.icon/6*56;chip(g,11,sxIcon,syIcon,56,56,b.left+(h.second?8:0),b.top+8);}
+            DesktopSave meta=metadata(slot(slot));if(meta!=null&&slot>=2&&meta.icon>=0&&meta.icon<16){chip(g,11,meta.icon*56,312,56,56,b.left+8,b.top+8);}
             String label=h.saveLabels.get(slot);if(label!=null)roomText(g,label,b.left+(h.second?72:104),b.top+(h.second?50:42),180,16,0xffffffff);
             if(meta!=null&&!meta.caption.isEmpty()){Shape clip=g.getClip();g.clipRect(b.left+64,b.top,224,42);roomText(g,meta.caption,b.left+(h.second?72:64),b.top+(h.second?10:6),216,18,0xffffffff);g.setClip(clip);}
         }

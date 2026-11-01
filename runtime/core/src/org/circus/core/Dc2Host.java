@@ -20,6 +20,8 @@ public class Dc2Host implements MesVm.ContextHost,MesVm.MenuHost,MesVm.ChoiceHos
     public final Dc2Scene scene=new Dc2Scene();public final Dc2Credits credits=new Dc2Credits();
     public UiCapture uiCapture;public UiCapture.Renderer captureRenderer;public boolean fullscreen;public int windowRequest=-1;private final int[] confirmations=new int[20];private final byte[] voicePreferences=new byte[256];public int voiceCharacter=17,voicePan;private byte[] automaticMenuAction;
     public final Set<Integer> availableSaves=new HashSet<>();
+    /** Opcodes whose record shape is verified but whose visual effect is not modelled yet. */
+    public final List<String> unmodelled=new ArrayList<>();
     public final Set<String> readCheckpoints=new TreeSet<>();
     public final String[] audio={"","","","","",""};
     public final int[] audioGeneration=new int[6];
@@ -75,6 +77,9 @@ public class Dc2Host implements MesVm.ContextHost,MesVm.MenuHost,MesVm.ChoiceHos
     public boolean beforeInstruction(Profile p,int opcode)throws IOException{if(!p.id.equals("dc2dm-9d72"))throw new IOException("DM profile required");return waiting();}
     public boolean waiting(){return credits.active()||returnRequested||saveRequest>=0||loadRequest>=0||remaining!=0||audioMask!=0||ui.waiting||textWaiting||presentationWaiting||!movie.isEmpty();}
     public long waitTicket(){return ticket;}
+    /** Diagnostics for tools: which of the wait conditions is currently holding. */
+    public long remainingMs(){return remaining;}
+    public int audioMask(){return audioMask;}
     public long remainingMillis(){return remaining;}
     protected void nextTicket()throws IOException{if(ticket==Long.MAX_VALUE)throw new IOException("DM event counter exhausted");ticket++;}
     public void elapse(long ms){if(musicFadeRemaining>0){musicFadeRemaining=Math.max(0,musicFadeRemaining-ms);if(musicFadeRemaining==0){play(0,"",false);music=-1;}}endingClock+=ms;boolean rolling=credits.active();credits.elapse(ms);if(rolling&&!credits.active())try{state.write(100,29,1);}catch(IOException impossible){throw new IllegalStateException(impossible);}scene.elapse(ms);if(remaining>0)remaining=Math.max(0,remaining-ms);pollAudio();}
@@ -159,9 +164,22 @@ public class Dc2Host implements MesVm.ContextHost,MesVm.MenuHost,MesVm.ChoiceHos
     }
     public boolean command(String op,int[] a,byte[] bytes)throws IOException{
         switch(op){
+        // D.C.II opcodes 24h/4Eh/50h/5Ch are verified to consume one string record as their payload
+        // (414B9D/414F00/415124/416344 each advance the PC global A0918C past it) but their visual
+        // effect is not yet modelled. Record them instead of inventing a quad or a silent NOP.
+        case "pc.payload.string":unmodelled.add(String.format("%s %s %s",Integer.toHexString(pc),Arrays.toString(a),codec.decode(bytes)));return true;
+        // Record shape and PC effect are verified from the 2006 handler, but the engine state it
+        // touches is not modelled yet. Recording it keeps a missing model from masquerading as
+        // "no effect" while still letting the rest of the script run.
+        case "native.unmodelled":unmodelled.add(String.format("%s %s %s",script==null?"?":script.name,Integer.toHexString(pc),Arrays.toString(a)));return true;
         case "system.exit":exitRequested=true;return true;
         case "dm.system.return":returnRequested=true;nextTicket();return true;
-        case "dm.scene.effect":scene.effect(a[0],a[1]);return true;
+        // 411670 branches on kinds 0..6 (4117F1 is the last). Kinds 5 and 6 have no model here,
+        // so they are recorded instead of being drawn as some neighbouring effect.
+        case "dm.scene.effect":{
+            if(a[0]==5||a[0]==6){unmodelled.add("effect "+a[0]+","+a[1]);return true;}
+            scene.effect(a[0],a[1]);return true;
+        }
         case "dm.ui.grid_begin":grid.clear();gridWaiting=false;registers.put(246,0);registers.put(253,255);registers.put(254,255);return true;
         case "dm.ui.grid_rect":{Dc2Ui.Button b=new Dc2Ui.Button();b.left=a[0];b.top=a[1];b.right=a[2];b.bottom=a[3];require(grid.size()<50,"grid capacity");grid.add(b);return true;}
         case "dm.ui.grid_sound":gridHoverSound=a[0];gridClickSound=a[1];return true;
@@ -188,7 +206,9 @@ public class Dc2Host implements MesVm.ContextHost,MesVm.MenuHost,MesVm.ChoiceHos
         case "dm.ui.resource":require(a[0]>=0&&a[0]<5,"UI slot");if(!text(bytes).equals("-"))scene.slots[21+a[0]]=text(bytes);return true;
         case "host.command_with_string":ui.button(a,bytes);return true;
         case "dm.ui.button_voice":ui.last().voice=text(bytes);return true;
-        case "dm.ui.button_sound":ui.last().hoverSound=a[0];ui.last().clickSound=a[1];return true;
+        // 40DE20 indexes the button table with 988C9C-1 and returns before writing when that is negative,
+        // so LOAD/SAVE (which open their page with 54h before creating any 4Eh button) must stay a no-op.
+        case "dm.ui.button_sound":{if(ui.buttons.isEmpty())return true;ui.last().hoverSound=a[0];ui.last().clickSound=a[1];return true;}
         case "dm.ui.button_sprite":ui.quad(a,true);return true;
         case "ui.button_text":ui.text(a,bytes,true);return true;
         case "dm.ui.text":ui.text(a,bytes,false);return true;
@@ -262,7 +282,12 @@ public class Dc2Host implements MesVm.ContextHost,MesVm.MenuHost,MesVm.ChoiceHos
             if(!resources.files.paths().contains(("AdvData/GRP/"+archive).toLowerCase(java.util.Locale.ROOT)))archive="SYSTEM/calenderdef.PCK";
             Archive pack=resources.files.archive("AdvData/GRP/"+archive);require(month<=pack.entries.size(),"calendar month");
             scene.slots[1]="pck:"+archive+"#"+(month-1);variables.write(5,29,0);scene.publish(ui,0,0);delay(1600);return true;
-        }if(a[0]==6){saveGrid=script.name.equalsIgnoreCase("SAVE");return true;}if(a[0]==100){require(read(99,1)==0,"save context text");return true;}if(a[0]>=214)return true;if(a[0]==19&&a[1]==0){variables.write(9,87,availableSaves.contains(read(99,254))?0:1);return true;}throw new IOException("Unimplemented DM command "+Arrays.toString(a));
+        }if(a[0]==6){ // 404F50 case 6: a[1] is the page kind. SAVE.mes sends (6,0), LOAD.mes (6,1).
+            saveGrid=a.length>1?a[1]==0:script.name.equalsIgnoreCase("SAVE");return true;}if(a[0]==100){require(read(99,1)==0,"save context text");return true;}if(a[0]>=214)return true;if(a[0]==19&&a[1]==0){variables.write(9,87,availableSaves.contains(read(99,254))?0:1);return true;}
+        // Original D.C.II packs 50 sub-commands into 404F50; only the ones above are modelled. Recording the
+        // rest keeps a missing model visible instead of aborting the save/load screen that issued it.
+        if(resources.profile.id.equals("dc2-3363")){unmodelled.add("system "+Arrays.toString(a));return true;}
+        throw new IOException("Unimplemented DM command "+Arrays.toString(a));
         case "native.no_effect":return true;
         default:return false;
         }

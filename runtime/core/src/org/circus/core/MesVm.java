@@ -84,6 +84,10 @@ public final class MesVm {
         byte[] action=host instanceof Dc2Host?((Dc2Host)host).menuActionForGrid(index):host instanceof Dc3Host?((Dc3Host)host).menuActionForGrid(index):null;if(action==null)return false;Integer target=script.label(action);if(target==null)throw new IOException("Grid action label missing");pc=target;status=Status.RUNNING;return true;
     }
     private void emit(String op,int[] args,byte[] bytes)throws IOException{if(!host.command(op,args,bytes))throw new IOException("Unimplemented host effect: "+op);}
+    /** Instruction trace used by the reverse-engineering probes; off unless -Dcircus.trace is set. */
+    static final boolean TRACE=System.getProperty("circus.trace")!=null;
+    private void trace(MesScript s,int at,int opcode,String op,int[] args){if(!TRACE)return;if(!s.name.toLowerCase(Locale.ROOT).contains(System.getProperty("circus.trace").toLowerCase(Locale.ROOT)))return;
+        StringBuilder b=new StringBuilder(String.format("  %05X %02X %-26s",at,opcode,op));for(int v:args)b.append(' ').append(v);System.out.println(b);}
     public Status run(int budget){
         if(budget<=0||budget>100000)throw new IllegalArgumentException("Instruction budget must be 1..100000");
         if(status==Status.WAIT_HOST&&host instanceof MenuHost){try{byte[] action=((MenuHost)host).pollMenuAction();if(action!=null){Integer target=script.label(action);if(target==null)throw new IOException("Timed menu target missing");pc=target;status=Status.RUNNING;}}catch(IOException e){status=Status.FAULT;error=script.name+": "+e.getMessage();}}
@@ -100,6 +104,7 @@ public final class MesVm {
         if(r.opcode!=0 && next<script.length() && script.at(next).opcode==p.extension){
             MesScript.Record ext=script.at(next);int n=args.length;args=Arrays.copyOf(args,n+4);System.arraycopy(ext.args,0,args,n,4);next=ext.end;
         }
+        trace(script,pc,r.opcode,op,args);
         if(op.equals("unknown"))throw new IOException(String.format("Unsupported opcode 0x%02X (%s)",r.opcode,p.id));
         switch(op){
         case "stream.stop": status=Status.HALTED;return;
@@ -140,7 +145,8 @@ public final class MesVm {
         case "pc.character_pair":case "pc.portrait_pair":{emit(op,new int[]{0},r.bytes);if(next<script.length()&&script.at(next).opcode==0x46){MesScript.Record pair=script.at(next);emit(op,new int[]{1},pair.bytes);next=pair.end;}break;}
         case "script.entry_label":pendingLabel=r.bytes.clone();break;
         case "pc.script.transfer":case "dm.script.transfer":case "dm.script.transfer_alt":{
-            int mode=op.equals("pc.script.transfer")?(args[0]==4?2:args[0]==3||args[0]==5?3:1):op.equals("dm.script.transfer_alt")?2:1;
+            // D.C.II encodes the mode byte only when the profile has a string8 class; 2C..48 carry none.
+            int mode=op.equals("pc.script.transfer")?(args.length==0?1:args[0]==4?2:args[0]==3||args[0]==5?3:1):op.equals("dm.script.transfer_alt")?2:1;
             if(mode==1&&next<script.length()){MesScript.Record following=script.at(next);if(following.opcode==p.companion&&following.args[0]==1)mode=3;}
             String name=Binary.safePath(new String(r.bytes,Binary.SJIS));MesScript target=library.script(name);
             if(!target.profile.id.equals(p.id))throw new IOException("Cross-profile transfer rejected");
@@ -162,8 +168,14 @@ public final class MesVm {
         }
         case "dd.grid.text":{if(args[3]==99)emit(op,args,new byte[0]);else{MesScript.Record payload=script.at(next);if(payload.opcode<p.stringStart||payload.opcode>=p.wordsStart)throw new IOException("List caption missing");emit(op,args,payload.bytes);next=payload.end;}break;}
         case "ui.text":if(args[2]==0){emit(op,args,new byte[0]);break;}
-        case "pc.grid.caption":case "pc.save_context":case "pc.resource_payload":case "dm.ui.text":case "ui.button_text":case "host.command_with_string":case "scene.checkpoint":{
-            MesScript.Record payload=script.at(next);if(payload.opcode<p.stringStart||payload.opcode>=p.wordsStart)throw new IOException("Invalid UI string payload");
+        case "pc.payload.string":{
+            // Framing-only binding: the native handler provably consumes one string record here,
+            // but the effect behind it is still open, so the host records it instead of guessing.
+            MesScript.Record payload=script.at(next);
+            if(payload.opcode<p.stringStart||payload.opcode>=p.wordsStart)throw new IOException("Invalid string payload");
+            emit(op,args,script.nativeText(payload));next=payload.end;break;
+        }
+        case "pc.grid.caption":case "pc.save_context":case "pc.resource_payload":case "dm.ui.text":case "ui.button_text":case "host.command_with_string":case "scene.checkpoint":{            MesScript.Record payload=script.at(next);if(payload.opcode<p.stringStart||payload.opcode>=p.wordsStart)throw new IOException("Invalid UI string payload");
             emit(op,args,op.equals("ui.text")||op.equals("dm.ui.text")?script.nativeText(payload):payload.bytes);next=payload.end;break;
         }
         case "ui.confirm":case "dm.ui.confirm":{

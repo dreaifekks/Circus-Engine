@@ -11,6 +11,9 @@ public final class PcHost extends Dc2Host {
     private final byte[] globals=new byte[100],cg=new byte[1600],seen=new byte[1600],voiceEnabled=new byte[128],scratch=new byte[100];
     public final ScriptList list=new ScriptList();private boolean gridTarget;private String musicEndAction="";
     private int spriteFlags;private int randomState=0x63c25769;private boolean timedInput;
+    private boolean pendingRegionFlag;
+    /** Original D.C.II (2006) shares the PC host but keeps its own draw-batch caps. */
+    private final boolean original;
     // PC1 4304F8 / PC2 500F30 defaults (native bytes are G,R,B,0). START assigns later indices separately.
     private static final int[] PC_PALETTE={0xff000000,0xff0000ff,0xffff0000,0xffff00ff,0xff00ff00,0xff00ffff,0xffffff00,0xffffffff,0xff854e28,0xffccccff,0xff774400,0xffff7f7f,0xffcccccc};
     public final int[] gridBounds=new int[8];
@@ -21,15 +24,15 @@ public final class PcHost extends Dc2Host {
         if(saveGrid&&slot<2||!saveGrid&&!availableSaves.contains(slot))return null;
         registers.put(253,index);registers.put(254,slot);registers.put(246,0);gridWaiting=ui.waiting=false;
         if(gridClickSound!=255)play(1,resources.named("sound",gridClickSound),false);
-        return (second&&!saveGrid?"selsave2":"selsave").getBytes(Binary.SJIS);
+        return (saveGrid?"selsave":"selsave2").getBytes(Binary.SJIS);
     }
     @Override public byte[] pollMenuAction(){if(ui.waiting&&!audioActive[0]&&!musicEndAction.isEmpty()){byte[] a=musicEndAction.getBytes(Binary.SJIS);musicEndAction="";ui.waiting=gridWaiting=false;ui.actions[0]=ui.actions[1]="";return a;}return null;}
     public boolean hasTimedInput(){return timedInput&&remaining!=0;}
     /** 4189D0 / 422DA0: older engines browse one message in the original message window. */
     public void openHistory()throws IOException{history.active=true;history.selected=Math.max(0,history.entries.size()-2);ui.waiting=true;ui.buttons.clear();ui.buttons.addAll(Dc2Ui.copyButtons(ui.buttonTemplates.get(messageMode==0?1:4)));showHistory();nextTicket();}
     private void showHistory(){if(history.entries.isEmpty())return;Dc2History.Entry e=history.entries.get(history.selected);speaker=e.speaker;body=e.body;}
-    public static boolean supports(Profile p){return p.id.equals("dc2pc-5769")||p.id.equals("dcpc-2063");}
-    public PcHost(CircusResources r,TextCodec c){super(r,c);second=r.profile.id.equals("dc2pc-5769");System.arraycopy(PC_PALETTE,0,ui.palette,0,PC_PALETTE.length);boolean cn=c.charset.name().equalsIgnoreCase("GBK");familyName=second?(cn?"樱内":"桜内"):(cn?"朝仓":"朝倉");givenName=second?(cn?"义之":"義之"):(cn?"纯一":"純一");gridHoverSound=gridClickSound=255;Arrays.fill(voiceEnabled,(byte)1);registers.put(13,0);registers.put(19,0);registers.put(25,0);registers.put(26,8);registers.put(27,8);}
+    public static boolean supports(Profile p){return p.id.equals("dc2pc-5769")||p.id.equals("dcpc-2063")||p.id.equals("dc2-3363");}
+    public PcHost(CircusResources r,TextCodec c){super(r,c);second=r.profile.id.equals("dc2pc-5769");original=r.profile.id.equals("dc2-3363");if(original)ui.quadLimit=60;System.arraycopy(PC_PALETTE,0,ui.palette,0,PC_PALETTE.length);boolean cn=c.charset.name().equalsIgnoreCase("GBK");familyName=second?(cn?"樱内":"桜内"):(cn?"朝仓":"朝倉");givenName=second?(cn?"义之":"義之"):(cn?"纯一":"純一");gridHoverSound=gridClickSound=255;Arrays.fill(voiceEnabled,(byte)1);registers.put(13,0);registers.put(19,0);registers.put(25,0);registers.put(26,8);registers.put(27,8);}
     @Override public void elapse(long ms){super.elapse(ms);pcCredits.elapse(ms);if(map.active)map.elapsed+=Math.max(0,ms);}
     @Override public boolean waiting(){return pcCredits.active||super.waiting();}
     @Override public boolean internalMenuAction(long expected,int button)throws IOException{
@@ -102,6 +105,8 @@ public final class PcHost extends Dc2Host {
     private void templates(int selector,boolean buttons)throws IOException{
         if(buttons){gridTarget=false;if(selector<0||selector>4)throw new IOException("PC button template "+selector);int[] cap={0,8,4,10,8};if(selector!=0){List<Dc2Ui.Button> t=ui.buttonTemplates.get(selector);t.clear();t.addAll(Dc2Ui.copyButtons(ui.buttons.subList(0,Math.min(cap[selector],ui.buttons.size()))));}ui.buttons.clear();ui.hovered=ui.pressed=-1;return;}
         if(selector==255&&second){ui.quads.clear();return;}int[] cap={0,10,5,second?30:20,10,5,second?30:20,second?30:20};
+        // D.C.II 2006 415F20..41614C clamps each batch at 10/5/30/10/5/30/30 for selectors 1..7.
+        if(original)cap=new int[]{0,10,5,30,10,5,30,30};
         if(selector<0||selector>255)throw new IOException("PC draw template "+selector);if(selector>0&&selector<cap.length){List<Dc2Ui.Quad> t=ui.quadTemplates.get(selector);t.clear();t.addAll(Dc2Ui.copyQuads(ui.quads.subList(0,Math.min(cap[selector],ui.quads.size()))));}ui.quads.clear();
     }
     @Override public void addChoice(byte[] label,byte[] caption)throws IOException{
@@ -117,8 +122,15 @@ public final class PcHost extends Dc2Host {
         switch(op){
         case "dm.audio.voice":lineVoice=text;playVoice(text);return true;
         case "ui.music_end_action":musicEndAction=text;return true;
-        case "host.command_with_string":gridTarget=false;return super.command(op,a,bytes);
+        case "host.command_with_string":{
+            gridTarget=false;super.command(op,a,bytes);
+            // D.C.II 29h sets BE8BAC=1 and 4Eh consumes it on the region it just created.
+            if(pendingRegionFlag){ui.last().flags|=1;pendingRegionFlag=false;}
+            return true;
+        }
         case "dm.ui.grid_rect":gridTarget=true;return super.command(op,a,bytes);
+        // 414EF1 sets BE8BAC=1; 414F61 then consumes it to flag the region the next 4Eh creates.
+        case "pc.region_flag":pendingRegionFlag=true;return true;
         case "pc.grid.item":gridTarget=false;list.add(a,slot(a[6]));return true;
         case "grid.item_action":list.last().action=text;return true;
         // 41D696 writes the preceding entry's x/y and normal/hover palettes,
@@ -134,7 +146,13 @@ public final class PcHost extends Dc2Host {
         case "text.speaker":speaker=prose(bytes);speakerPending=true;return true;
         case "text.body":scene.publish(ui,0,0);if(!speakerPending||messageMode!=0)speaker="";speakerPending=false;body=prose(bytes);unlock("scenario_scripts",script.name,98);if(!body.isEmpty())history.append(speaker,body,lineVoice,script.name,pc);lineVoice="";presentationWaiting=true;textRendered=false;nextTicket();return true;
         case "ui.button_text":case "dm.ui.text":{boolean sprite=op.equals("ui.button_text");ui.text(a,new byte[0],sprite);Dc2Ui.Quad q=sprite?ui.last().sprites.get(ui.last().sprites.size()-1):ui.quads.get(ui.quads.size()-1);q.text=codec.decode(bytes);if(sprite){q.width=bytes.length*14+1;normalizeButtonText(q);}return true;}
-        case "pc.movie":movie=Binary.safePath(text);if(!movie.toLowerCase(Locale.ROOT).startsWith("advdata/"))movie="AdvData/"+movie;movieGeneration++;play(0,"",false);nextTicket();return true;
+        case "pc.movie":{
+            // D.C.II writes "advdata\movie\name.mpg"; normalise before the prefix check so the
+            // path is not prefixed twice.
+            String path=text.replace('\\','/');
+            if(!path.toLowerCase(Locale.ROOT).startsWith("advdata/"))path="AdvData/"+path;
+            movie=Binary.safePath(path);movieGeneration++;play(0,"",false);nextTicket();return true;
+        }
         case "pc.history":case "pc.checkpoint":checkpoint=a[0]|a[1]<<8;if(op.equals("pc.history"))readCheckpoints.add(script.name+":"+checkpoint);return true;
         case "pc.reset":variables.clearOrdinary();variables.clearHistory();return true;
         case "pc.save_context":return true; // The session owns a complete caller snapshot, including the current sentence.
@@ -149,8 +167,18 @@ public final class PcHost extends Dc2Host {
         case "pc.background":super.command("dm.scene.background",a,bytes);return super.command("dm.scene.preload",new int[]{1},bytes);
         case "pc.character_pair":return super.command("dm.scene.character",a,bytes);
         case "pc.portrait_pair":scene.slots[18+a[0]]=text.equals("-")?"":text;return true;
-        case "pc.character":case "pc.character_overlay":return super.command(op.equals("pc.character")?"dm.scene.character":"dm.scene.character_overlay",a,bytes);
+        // Original D.C.II 416896 encodes no slot byte: the string record alone picks the actor,
+        // so 32h drives slot 0 and 33h drives the overlay slot.
+        case "pc.character":case "pc.character_overlay":{
+            boolean overlay=op.equals("pc.character_overlay");
+            int[] slot=a.length>0?a:new int[]{overlay?1:0};
+            return super.command(overlay?"dm.scene.character_overlay":"dm.scene.character",slot,bytes);
+        }
         case "pc.quad":quad(a,false);return true;
+        // Original D.C.II 416151 records the 51h companion as {sx, sy, right, bottom}: the unflagged
+        // form stores right-sx/bottom-sy, while 40h keeps both raw and reuses the low bits as a colour.
+        // That is the same contract quad() already applies for pc.quad.
+        case "dc2.quad":if(a.length!=8)throw new IOException("D.C.II region needs the 51h extension");quad(a,false);return true;
         case "pc.button_sprite":quad(a,true);return true;
         case "pc.origin":ui.x=a[2]==0?a[0]:ui.x+a[0];ui.y=a[2]==0?a[1]:ui.y+a[1];return true;
         case "pc.action0":case "pc.action1":case "pc.action2":case "pc.action3":ui.actions[op.charAt(op.length()-1)-'0']=text;return true;
