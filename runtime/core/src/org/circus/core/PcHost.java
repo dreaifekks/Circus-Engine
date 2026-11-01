@@ -120,7 +120,7 @@ public final class PcHost extends Dc2Host {
         timedInput=false;
         String text=new String(bytes,Binary.SJIS);
         switch(op){
-        case "dm.audio.voice":lineVoice=text;playVoice(text);return true;
+        case "dm.audio.voice":lineVoice=voiceStops(text)?"":text;playVoice(text);return true;
         case "ui.music_end_action":musicEndAction=text;return true;
         case "host.command_with_string":{
             gridTarget=false;super.command(op,a,bytes);
@@ -145,7 +145,14 @@ public final class PcHost extends Dc2Host {
         }
         case "text.speaker":speaker=prose(bytes);speakerPending=true;return true;
         case "text.body":scene.publish(ui,0,0);if(!speakerPending||messageMode!=0)speaker="";speakerPending=false;body=prose(bytes);unlock("scenario_scripts",script.name,98);if(!body.isEmpty())history.append(speaker,body,lineVoice,script.name,pc);lineVoice="";presentationWaiting=true;textRendered=false;nextTicket();return true;
-        case "ui.button_text":case "dm.ui.text":{boolean sprite=op.equals("ui.button_text");ui.text(a,new byte[0],sprite);Dc2Ui.Quad q=sprite?ui.last().sprites.get(ui.last().sprites.size()-1):ui.quads.get(ui.quads.size()-1);q.text=codec.decode(bytes);if(sprite){q.width=bytes.length*14+1;normalizeButtonText(q);}return true;}
+        case "ui.button_text":case "dm.ui.text":{
+            boolean sprite=op.equals("ui.button_text");ui.text(a,new byte[0],sprite);Dc2Ui.Quad q=sprite?ui.last().sprites.get(ui.last().sprites.size()-1):ui.quads.get(ui.quads.size()-1);
+            // The 2006 scene-replay lists prefix every label with "@s" (4674 of 4685 cases) and the
+            // native sprite keeps the marker inside its 14-pitch width. D.C.II P.C stores the same
+            // labels without it, so draw the bare text and keep the native width.
+            byte[] label=bytes;
+            if(sprite&&label.length>2&&label[0]=='@'&&label[1]=='s')label=java.util.Arrays.copyOfRange(label,2,label.length);
+            q.text=codec.decode(label);if(sprite){q.width=bytes.length*14+1;normalizeButtonText(q);}return true;}
         case "pc.movie":{
             // D.C.II writes "advdata\movie\name.mpg"; normalise before the prefix check so the
             // path is not prefixed twice.
@@ -163,6 +170,14 @@ public final class PcHost extends Dc2Host {
         case "pc.button_template":templates(a[0],true);return true;
         case "pc.quad_template":templates(a[0],false);return true;
         case "pc.resource":case "pc.resource_payload":if(a[0]<0||a[0]>3)throw new IOException("PC message resource slot");scene.slots[21+a[0]]=text;return true;
+        // Original D.C.II 414B9D switches on the argument into three fixed handles 45E808/45E80C/
+        // 45E810, i.e. 0 -> 21, 2 -> 22, 3 -> 23. There is no handle for 1, so the PC slot formula
+        // above does not apply to this profile.
+        case "dm.system.resource_handle":{
+            int slot=a[0]==0?21:a[0]==2?22:a[0]==3?23:-1;
+            if(slot<0)throw new IOException("DM resource handle "+a[0]);
+            scene.slots[slot]=text;return true;
+        }
         case "pc.image6":case "pc.image7":case "pc.image8":scene.slots[10+op.charAt(op.length()-1)-'6']=text.equals("-")?"":text;return true;
         case "pc.background":super.command("dm.scene.background",a,bytes);return super.command("dm.scene.preload",new int[]{1},bytes);
         case "pc.character_pair":return super.command("dm.scene.character",a,bytes);
@@ -287,7 +302,7 @@ public final class PcHost extends Dc2Host {
         int[] priorities=second?new int[]{6,5,4,3,2,1,1654170256,-1417526131,1351985282,27799,0,0,0}:new int[]{12,13,11,10,7,8,0,5,4,3,6,9,0};
         int score=mode==0?0:2099,index=mode==0?0:15;for(int n=0;n<priorities.length;n++){int value=variables.read(0,n)*100+priorities[n];if(value>score){score=value;index=n;}}variables.write(9,10,index);
     }
-    @Override protected void playVoice(String source)throws IOException{String name=source;voicePan=name.startsWith("<")?-1000:name.startsWith(">")?1000:0;if(name.startsWith("<")||name.startsWith(">")||name.startsWith("="))name=name.substring(1);voiceCharacter=PcVoice.character(name,second);play(5,PcVoice.forced(name,second)||read(100,60+voiceCharacter)==0?name:"",false);}
+    @Override protected void playVoice(String source)throws IOException{if(voiceStops(source)){play(5,"",false);return;}String name=source;voicePan=name.startsWith("<")?-1000:name.startsWith(">")?1000:0;if(name.startsWith("<")||name.startsWith(">")||name.startsWith("="))name=name.substring(1);voiceCharacter=PcVoice.character(name,second);play(5,PcVoice.forced(name,second)||read(100,60+voiceCharacter)==0?name:"",false);}
     @Override public float voiceGain()throws IOException{return audio[5].startsWith("mix:")||PcVoice.forced(audio[5],second)||read(100,60+PcVoice.character(audio[5],second))==0?1:0;}
     private String prose(byte[] raw)throws IOException{return codec.decode(raw).replace("$n",givenName).replace("$s",familyName);}
     @Override public void copyPersistentFrom(Dc2Host other)throws IOException{super.copyPersistentFrom(other);PcHost p=(PcHost)other;familyName=p.familyName;givenName=p.givenName;System.arraycopy(p.globals,0,globals,0,globals.length);System.arraycopy(p.cg,0,cg,0,cg.length);System.arraycopy(p.seen,0,seen,0,seen.length);System.arraycopy(p.voiceEnabled,0,voiceEnabled,0,voiceEnabled.length);}

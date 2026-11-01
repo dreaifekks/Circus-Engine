@@ -7,6 +7,13 @@
       "description": "Decoder leaves PC at opcode 00; dispatcher sets a stop/yield flag. Not a one-byte NOP.",
       "operands": []
     },
+    "dm.system.resource_handle": {
+      "description": "Load one of three fixed engine resources. arg0 selects the handle: 0 -> 45E808, 2 -> 45E80C, 3 -> 45E810; 1 is rejected. 414B9D releases the previous handle and reloads it from the trailing string record. Distinct from pc.resource_payload, whose slot ids are contiguous.",
+      "operands": [
+        "u8_handle",
+        "u8_unused"
+      ]
+    },
     "control.marker": {
       "description": "Context-dependent 3-byte record: IF companion uses signed first byte as block ID; sum list terminator.",
       "operands": [
@@ -1286,7 +1293,7 @@
         "0x20": "dm.ui.commit",
         "0x21": "pc.quad_template",
         "0x22": "native.unmodelled",
-        "0x24": "pc.resource_payload",
+        "0x24": "dm.system.resource_handle",
         "0x29": "pc.region_flag",
         "0x2A": "pc.effect",
         "0x2B": "native.unmodelled",
@@ -1314,7 +1321,7 @@
         "0x4C": "choice.caption",
         "0x4E": "host.command_with_string",
         "0x4F": "pc.button_sprite",
-        "0x50": "pc.payload.string",
+        "0x50": "ui.button_text",
         "0x51": "arguments.extend",
         "0x52": "dc2.quad",
         "0x54": "dm.ui.grid_begin",
@@ -1359,7 +1366,8 @@
           "0x0B/0x54/0x55 list pages": "4155FB opens a list page (page/content rects, clears 97564C, 9757FC and the 0x1658-dword item table), 4156E2 appends one {left,top,right,bottom} entry at 9756B8 with a 16-byte stride, 415867 stores the pending grid state, calls 414210(1,0) and sets wait code 0Bh. Only LOAD/SAVE and the eight meza_* scripts use them (18/90/18 records). D.C.II P.C binds the same screens one opcode higher as 55h/56h/0Ah, which is the cross-check for this triple.",
           "0x36": "417237 releases the 9FCE48/9FCE4C/9FCE50 and 45E800 handles, copies the string to A08D04, calls 4137D0 and restores PC from 9DA2CC - the same navigation contract as 35h, without 35h's wait code. All 78 records name a system script (option 25, SAVE 25, LOAD 25, advmenu 3), which is what the advmenu config/save/load labels use to leave the menu.",
           "0x1C": "414958 tail-calls 404F50(a0,a1), whose 50-way jump table at 4052D0 dispatches the system-screen commands. SAVE.mes sends (6,0) and LOAD.mes (6,1), which is the native source of the save/load page flag. Only 94 records exist and the modelled set covers 6; the remainder are recorded, not swallowed.",
-          "0x1B": "417237 releases the system-menu graphics handles (45E800/9FCE48/9FCE4C/9FCE50) and sets the return wait, the same contract Dc2Host applies for dm.system.return. ADVMENU's return label ends with 1Bh 2,0, so binding it to native.unmodelled stopped the VM at the trailing 00h instead of handing the story back."
+          "0x1B": "417237 releases the system-menu graphics handles (45E800/9FCE48/9FCE4C/9FCE50) and sets the return wait, the same contract Dc2Host applies for dm.system.return. ADVMENU's return label ends with 1Bh 2,0, so binding it to native.unmodelled stopped the VM at the trailing 00h instead of handing the story back.",
+          "0x50": "415124 reads two words plus the trailing string payload and calls 40DD50, which appends a text sprite to the previous button: it scans the twelve 40-byte sprite slots for a free one, stores x at +0x20 and y at +0x24, and writes width = 14*strlen+1 at +0x38. That is exactly the ui.button_text contract D.C.II P.C reaches through 51h (dc2pc = dc2 + 1 throughout this trio: 4Eh/4Fh/50h vs 4Fh/50h/51h). The old pc.payload.string guess discarded all 4685 records, which left every CG Mode thumbnail caption blank."
         },
         "open": {
           "0x45": "dispatch entry equals the shared epilogue, so the original engine ignores it; it is read as a payload by 32h (7629 cases) and 50h (4685 cases). Bound to native.no_effect to reproduce the original engine exactly; the sprite variant it carries is therefore dropped, which matches DC2 itself.",
@@ -1369,13 +1377,13 @@
           "0x59/0x5A/0x60/0x61/0x3B/0x3C/0x54/0x55/0x5E": "small lists, transforms or menu actions; frequency ranks suggest dc2pc-5769 64h..66h but the evidence is not yet decisive, left unknown"
         },
         "framing_only": {
-          "0x24/0x4E/0x50/0x5C": "414B9D, 414F00, 415124 and 416344 all recompute the PC from the string that follows the record, so these four consume exactly one string record; the effect is unmodelled and the host logs each occurrence instead of drawing it. 0x24 offsets 0,0 + 'system\\messwin' at START 0x5A, 0x4E offsets 743,420,799,452 + ':option' at START 0x85."
+          "0x24/0x4E/0x50/0x5C": "414B9D, 414F00, 415124 and 416344 all recompute the PC from the string that follows the record, so these four consume exactly one string record. 0x24 and 0x50 are no longer framing-only: they are dm.system.resource_handle and ui.button_text, and 0x4E is host.command_with_string. Only 0x5C is still unmodelled. 0x24 offsets 0,0 + 'system\\messwin' at START 0x5A; 0x4E offsets 743,420,799,452 + ':option' at START 0x85."
         },
         "disassembly_confirmed": {
-          "0x24": "414B9D reads the string at PC+1, advances PC by strlen+2 and switches on arg0 into the resource handles 45E808 (arg0=0), 45E80C (=2), 45E810 (=3): release the old handle, then 401CC0 reloads it. Identical shape to dc2pc-5769 42h pc.resource_payload.",
+          "0x24": "414B9D reads the string at PC+1, advances PC by strlen+2 and switches on arg0 into three fixed engine handles: 0 -> 45E808, 2 -> 45E80C, 3 -> 45E810 (no handle for 1). Each is released and then reloaded through 401CC0. The shape resembles dc2pc-5769 42h pc.resource_payload but the slot ids are not a contiguous 0..3 array, so the PC implementation's 21+arg0 was a guess. The corpus contains exactly one use: start.mes 0x5A ('24 0,0' + 45h 'system\\messwin'), and that picture already reached slot 21 through another path, which is why the wrong slot map never showed on screen. Renamed to dm.system.resource_handle so the runtime maps 0/2/3 explicitly instead of reusing a PC-only slot formula.",
           "0x60": "416CE6 stores the four i16 operands into A09E4C/A09E50/A09E54/A09E58 with no other side effect; START 0x6D uses [0,0,0,0] and the story scripts use [-150,0,150,0], i.e. left and right actor origins.",
           "0x62": "41678B forwards the four operands to 408010, which bounds arg0 to 0..3Fh and writes the three remaining bytes into the 64-entry table at 451720/451721/451722. Only one occurrence in the corpus (START 0x76, palette slot 13). The byte-to-channel order of 408010 is not yet confirmed.",
-          "0x4E/0x50/0x5C": "remain framing-only: each consumes exactly one string record (414F00/415124/416344) and the effect is unmodelled"
+          "0x4E/0x50/0x5C": "only 0x5C remains framing-only: it consumes exactly one string record (416344) and the effect is unmodelled"
         },
         "run_confirmed": {
           "method": "Each entry was added only after LaunchProbe re-ran START.mes and the opcode proved correct in place; the whole path START 0x5A -> 0xFD2 -> title_main 0x18 now executes.",

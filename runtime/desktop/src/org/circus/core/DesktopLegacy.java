@@ -151,7 +151,18 @@ public final class DesktopLegacy extends DesktopEngine {
     public String saveCaption(){return host().checkpointLabel.isEmpty()?(body().isEmpty()?lastLine:body()):codec.apply(host().checkpointLabel);}
     public BufferedImage preview()throws IOException{BufferedImage image=new BufferedImage(width,height,BufferedImage.TYPE_INT_RGB);Graphics2D g=image.createGraphics();try{scene(g,host().systemScene!=null?host().systemScene:host().scene.shown);}finally{g.dispose();}return image;}
     public void persist()throws IOException{if(audit)return;ByteArrayOutputStream b=new ByteArrayOutputStream();host().savePersistent(new DataOutputStream(b));atomic(saveDirectory.resolve("progress.dat"),b.toByteArray());}
-    private Picture picture(String name)throws IOException {if(name==null||name.isEmpty())return null;if(name.equals("@ui-capture"))return new Picture(captures.resolve(host().uiCapture));Picture p=images.get(name);if(p==null){p=new Picture(resources.image(name));images.put(name,p);loadedImages.add(name);}return p;}
+    private Picture picture(String name)throws IOException {
+        if(name==null||name.isEmpty())return null;if(name.equals("@ui-capture"))return new Picture(captures.resolve(host().uiCapture));
+        Picture p=images.get(name);if(p==null){
+            try{p=new Picture(resources.image(name));}catch(java.io.FileNotFoundException|java.nio.file.NoSuchFileException missing){
+                // A repacked install can lack an optional sheet; the native loader also leaves the
+                // slot empty. Keep the name so audits can list it instead of failing the frame.
+                missingImages.add(name);return null;
+            }
+            images.put(name,p);loadedImages.add(name);
+        }
+        return p;
+    }
     private int color(int style){return (captureState==null?host().ui.palette:captureState.palette)[style&63];}
     private BufferedImage drawCapture(int kind,DataInputStream input)throws IOException {
         if(kind!=UiCapture.LEGACY)throw new IOException("Wrong legacy UI capture profile");SceneCaptures.Legacy saved=captureState;captureState=new SceneCaptures.Legacy(input);

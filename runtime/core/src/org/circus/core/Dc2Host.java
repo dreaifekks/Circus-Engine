@@ -145,7 +145,13 @@ public class Dc2Host implements MesVm.ContextHost,MesVm.MenuHost,MesVm.ChoiceHos
         return 17;
     }
     private boolean voiceForced;
+    /**
+     * The 2006 system scripts clear the voice channel with "--" right after suppressing the BGM and
+     * effect channels. Neither host may treat it as a resource name.
+     */
+    protected static boolean voiceStops(String source){return source.equals("-")||source.equals("--");}
     protected void playVoice(String source)throws IOException{
+        if(voiceStops(source)){play(5,"",false);return;}
         String name=source;voicePan=name.startsWith("<")?-1000:name.startsWith(">")?1000:0;if(name.startsWith("<")||name.startsWith(">")||name.startsWith("="))name=name.substring(1);
         voiceCharacter=voiceCharacter(name);voiceForced=name.startsWith("#")||name.toUpperCase(Locale.ROOT).contains("SYS");if(name.startsWith("#"))name=name.substring(1);int semi=name.indexOf(';');if(semi>=0){voiceCharacter=Math.max(0,Math.min(127,name.charAt(0)-'a'));name=name.substring(semi+1);}
         play(5,voiceForced||read(95,voiceCharacter)!=0?name:"",false);
@@ -164,10 +170,6 @@ public class Dc2Host implements MesVm.ContextHost,MesVm.MenuHost,MesVm.ChoiceHos
     }
     public boolean command(String op,int[] a,byte[] bytes)throws IOException{
         switch(op){
-        // D.C.II opcodes 24h/4Eh/50h/5Ch are verified to consume one string record as their payload
-        // (414B9D/414F00/415124/416344 each advance the PC global A0918C past it) but their visual
-        // effect is not yet modelled. Record them instead of inventing a quad or a silent NOP.
-        case "pc.payload.string":unmodelled.add(String.format("%s %s %s",Integer.toHexString(pc),Arrays.toString(a),codec.decode(bytes)));return true;
         // Record shape and PC effect are verified from the 2006 handler, but the engine state it
         // touches is not modelled yet. Recording it keeps a missing model from masquerading as
         // "no effect" while still letting the rest of the script run.
@@ -253,7 +255,9 @@ public class Dc2Host implements MesVm.ContextHost,MesVm.MenuHost,MesVm.ChoiceHos
         case "dm.wait.duration":scene.publish(ui,0,0);delay(a[0]==0?-1:a[0]*200L);return true;
         case "dm.wait.mode":if(a[0]==0){if(choiceCount>0){ui.waiting=true;scene.publish(ui,0,0);nextTicket();}else delay(-1);}else waitIndicatorStyle=a[1];return true;
         case "dm.audio.voice_prepare":return true; // 436940 loads the following voice into the native cache; no playback.
-        case "dm.audio.voice":case "dm.audio.voice_wait":lineVoice=text(bytes);playVoice(lineVoice);return true;
+        case "dm.audio.voice":case "dm.audio.voice_wait":{
+            String voice=text(bytes);lineVoice=voice.equals("--")||voice.equals("-")?"":voice;playVoice(voice);return true;
+        }
         case "dm.audio.completion_action":require(bytes.length==0,"music completion label");return true; // 4305CA clears C22490 on music-room exit.
         case "dm.audio.music_attenuation":musicAttenuation=a[0];return true;
         // 42E91C -> 435E60 starts BGM fade; 432A9E subsequently waits for its completion.

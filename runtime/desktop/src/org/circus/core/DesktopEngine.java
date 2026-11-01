@@ -12,6 +12,13 @@ public abstract class DesktopEngine {
     public final boolean audit;
     public final int width,height;
     public final Set<String> loadedImages=new TreeSet<>(),loadedAudio=new TreeSet<>();
+    /**
+     * Image names the script asked for but the install does not contain. D.C.II refers to the
+     * thirty {@code system\scene_sam_NN} thumbnail sheets from the CG-unlock notification and the
+     * replay lists; repacks that ship only {@code scene_sam.CRX} still play, they just cannot draw
+     * those thumbnails, so the slot stays blank and the name is recorded here instead of aborting.
+     */
+    public final Set<String> missingImages=new TreeSet<>();
     public final Path saveDirectory;
     public boolean auto,rapid,hidden;
     public boolean fullscreenRequested,windowSizeReset;

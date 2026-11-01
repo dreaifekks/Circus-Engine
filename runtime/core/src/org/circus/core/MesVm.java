@@ -168,14 +168,7 @@ public final class MesVm {
         }
         case "dd.grid.text":{if(args[3]==99)emit(op,args,new byte[0]);else{MesScript.Record payload=script.at(next);if(payload.opcode<p.stringStart||payload.opcode>=p.wordsStart)throw new IOException("List caption missing");emit(op,args,payload.bytes);next=payload.end;}break;}
         case "ui.text":if(args[2]==0){emit(op,args,new byte[0]);break;}
-        case "pc.payload.string":{
-            // Framing-only binding: the native handler provably consumes one string record here,
-            // but the effect behind it is still open, so the host records it instead of guessing.
-            MesScript.Record payload=script.at(next);
-            if(payload.opcode<p.stringStart||payload.opcode>=p.wordsStart)throw new IOException("Invalid string payload");
-            emit(op,args,script.nativeText(payload));next=payload.end;break;
-        }
-        case "pc.grid.caption":case "pc.save_context":case "pc.resource_payload":case "dm.ui.text":case "ui.button_text":case "host.command_with_string":case "scene.checkpoint":{            MesScript.Record payload=script.at(next);if(payload.opcode<p.stringStart||payload.opcode>=p.wordsStart)throw new IOException("Invalid UI string payload");
+        case "pc.grid.caption":case "pc.save_context":case "pc.resource_payload":case "dm.system.resource_handle":case "dm.ui.text":case "ui.button_text":case "host.command_with_string":case "scene.checkpoint":{            MesScript.Record payload=script.at(next);if(payload.opcode<p.stringStart||payload.opcode>=p.wordsStart)throw new IOException("Invalid UI string payload");
             emit(op,args,op.equals("ui.text")||op.equals("dm.ui.text")?script.nativeText(payload):payload.bytes);next=payload.end;break;
         }
         case "ui.confirm":case "dm.ui.confirm":{

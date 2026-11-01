@@ -13,6 +13,9 @@ public final class Xpcm {
     static Xpcm pcm(byte[] p,int channels,int rate,int bits){return new Xpcm("pcm",p,channels,rate,bits);}
     public static Xpcm ogg(byte[] data)throws IOException{if(data.length<4||data[0]!='O'||data[1]!='g'||data[2]!='g'||data[3]!='S')throw new IOException("Expected Ogg stream");return new Xpcm("ogg",data,0,0,0);}
     public static Xpcm decode(byte[] data)throws IOException{
+        // The 2006 D.C.II keeps eight long SE (222..229, the alarm clock bed) as plain RIFF/WAVE
+        // next to 128 XPCM siblings; its own mixer reads both containers, so accept either.
+        if(Binary.u32(data,0)==0x46464952L&&data.length>=44&&Binary.u32(data,8)==0x45564157L)return wave(data);
         if(Binary.u32(data,0)!=0x4d435058L)throw new IOException("Expected XPCM");
         long size=Binary.u32(data,4);if(size==0||size>128*1024*1024)throw new IOException("Invalid decoded audio size");int mode=Binary.u8(data,8);
         if(mode==5){long packed=Binary.u32(data,12);Binary.range(16,packed,data.length);if(Binary.u32(data,16)!=0x5367674fL)throw new IOException("Invalid Ogg payload");return new Xpcm("ogg",Arrays.copyOfRange(data,16,16+(int)packed),0,0,0);}
@@ -21,6 +24,25 @@ public final class Xpcm {
         if(tag!=1||ch<1||ch>2||hz<8000||hz>192000||(bits!=8&&bits!=16)||align!=ch*bits/8||size%align!=0)throw new IOException("Invalid PCM wave format");
         if(mode==1||mode==3){if(bits!=16)throw new IOException("XPCM transform requires PCM16");return new Xpcm("pcm",XpcmTransform.decode(data,(int)size,mode,Binary.u8(data,9)),ch,hz,bits);}
         Binary.range(28,size,data.length);return new Xpcm("pcm",Arrays.copyOfRange(data,28,28+(int)size),ch,hz,bits);
+    }
+    /** RIFF/WAVE with a single {@code fmt } chunk and (optionally) a trailing {@code data} chunk. */
+    private static Xpcm wave(byte[] data)throws IOException{
+        int tag=-1,ch=-1,hz=-1,bits=-1,offset=-1,length=-1;
+        for(int p=12;p+8<=data.length;){
+            long size=Binary.u32(data,p+4);if(size<0||size>data.length-p-8)throw new IOException("Invalid WAVE chunk size");
+            long id=Binary.u32(data,p);
+            if(id==0x20746d66L&&size>=16){
+                tag=Binary.u16(data,p+8);ch=Binary.u16(data,p+10);hz=(int)Binary.u32(data,p+12);bits=Binary.u16(data,p+22);
+            }else if(id==0x61746164L){
+                offset=p+8;length=(int)size;break;
+            }
+            p+=(int)size+8+(size&1);
+        }
+        if(tag!=1||ch<1||ch>2||hz<8000||hz>192000||(bits!=8&&bits!=16)||offset<0||length<=0)
+            throw new IOException("Invalid PCM wave format");
+        if(length%(ch*bits/8)!=0)throw new IOException("Invalid PCM wave length");
+        Binary.range(offset,length,data.length);
+        return new Xpcm("pcm",Arrays.copyOfRange(data,offset,offset+length),ch,hz,bits);
     }
     /** Write an already decoded sound without constructing a second complete WAV. */
     public void writeTo(OutputStream out)throws IOException{
@@ -33,6 +55,7 @@ public final class Xpcm {
     public static void write(Archive.Source source,OutputStream out)throws IOException{
         long length=source.size();if(length<16||length>LIMIT)throw new IOException("Invalid XPCM resource size");
         byte[] header=readExact(source,0,(int)Math.min(length,32));
+        if(Binary.u32(header,0)==0x46464952L&&Binary.u32(header,8)==0x45564157L){source.copyTo(0,length,out);return;}
         if(Binary.u32(header,0)!=0x4d435058L)throw new IOException("Expected XPCM");
         long size=Binary.u32(header,4);if(size==0||size>LIMIT)throw new IOException("Invalid decoded audio size");int mode=Binary.u8(header,8);
         if(mode==5){long packed=Binary.u32(header,12);Binary.range(16,packed,length);
