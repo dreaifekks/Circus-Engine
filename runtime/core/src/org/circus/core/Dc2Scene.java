@@ -27,7 +27,7 @@ public final class Dc2Scene {
         void load(DataInput i)throws IOException{for(int n=0;n<28;n++)slots[n]=i.readUTF();for(int[] a:actors)for(int n=0;n<6;n++)a[n]=i.readInt();quads=Dc2Ui.loadQuads(i,2048);x=i.readInt();y=i.readInt();}
     }
     public void publish(Dc2Ui ui,int kind,long duration)throws IOException {
-        previous=shown;Frame f=new Frame();f.slots=slots.clone();for(int n=0;n<4;n++)f.actors[n]=characters[n].clone();f.quads=Dc2Ui.copyQuads(ui.quads);f.x=backgroundX;f.y=backgroundY;shown=f;mode=0;
+        previous=shown;Frame f=new Frame();f.slots=slots.clone();for(int n=0;n<4;n++)f.actors[n]=characters[n].clone();f.quads=Dc2Ui.copyQuads(ui.quads);f.quads.addAll(0,Dc2Ui.copyQuads(ui.quadTemplates.get(0)));f.x=backgroundX;f.y=backgroundY;shown=f;mode=0;
         transitionKind=kind;transitionDuration=transitionRemaining=duration;transitionSerial++;revision++;
     }
     public long scrollClock;

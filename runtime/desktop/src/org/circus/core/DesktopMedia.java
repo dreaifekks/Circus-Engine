@@ -24,7 +24,7 @@ public final class DesktopMedia implements AutoCloseable {
     private final AtomicLongArray request=new AtomicLongArray(6);
     private final AtomicReferenceArray<Loaded> ready=new AtomicReferenceArray<>(6);
     private final AtomicReference<Exception> failure=new AtomicReference<>();
-    private final DesktopMixer.Track[] tracks=new DesktopMixer.Track[6];private DesktopMixer.Track olderEffect;
+    private final DesktopMixer.Track[] tracks=new DesktopMixer.Track[6];private DesktopMixer.Track olderEffect,loopEffect;private final String[] names=new String[6];
     private static final class Loaded {final long id;final DesktopMixer.Track track;Loaded(long id,DesktopMixer.Track track){this.id=id;this.track=track;}}
     public DesktopMedia(DesktopEngine e){engine=e;}
     /** Audits keep the default: every sound is playing when sync returns. */
@@ -41,7 +41,7 @@ public final class DesktopMedia implements AutoCloseable {
         final boolean loop=engine.audioLoop(ch);final float volume=engine.volume(ch);final int pan=engine.pan(ch);sought[ch]=engine.audioSeekGeneration(ch);
         // Unity bundles cannot be exercised here without game data, so their reads stay on this thread.
         final Xpcm read=engine.resources instanceof UnityCircusResources?engine.resources.audio(name):null;
-        final long id=request.get(ch);
+        final long id=request.get(ch);names[ch]=name;
         LOADERS.execute(()->{
             try{
                 if(request.get(ch)!=id)return;
@@ -59,13 +59,32 @@ public final class DesktopMedia implements AutoCloseable {
         synchronized(ready){Loaded held=ready.get(ch);if(held==null||held.id<mine.id){ready.set(ch,mine);loser=held;}}
         if(loser!=null)loser.track.stop();
     }
-    /** 4281D0: DC2PC.exe has two effect channels, so a new effect cuts off only the older of two still playing. */
+    /**
+     * 4281D0, 428216, 42430A: DC2PC.exe keeps a looping effect on its own channel and plays one shots on another.
+     * A stop request ends all of them; otherwise a new effect cuts off only the older of two still sounding.
+     */
     private void keepEffectRinging(){
         DesktopMixer.Track playing=tracks[1];
-        if(playing==null||playing.finished()||!PcHost.followsExe||!engine.resources.profileId.equals("dc2pc-5769"))return;
+        if(!PcHost.followsExe||!engine.resources.profileId.equals("dc2pc-5769"))return;
+        if(engine.audio(1).isEmpty()||!engine.audioActive(1)){stopRinging();return;}
+        if(engine.audioLoop(1)&&loopEffect!=null){loopEffect.stop();loopEffect=null;}
+        if(playing==null||playing.finished())return;
+        tracks[1]=null;
+        if(playing.loops()){if(loopEffect!=null)loopEffect.stop();loopEffect=playing;return;}
         if(olderEffect!=null)olderEffect.stop();
-        olderEffect=playing;tracks[1]=null;
+        olderEffect=playing;
     }
+    private void stopRinging(){if(olderEffect!=null){olderEffect.stop();olderEffect=null;}if(loopEffect!=null){loopEffect.stop();loopEffect=null;}}
+    /** A closed menu resumes the same story, so whatever still matches keeps sounding instead of restarting. */
+    public void rebase()throws IOException{
+        for(int ch=0;ch<6;ch++){
+            int generation=engine.audioGeneration(ch);
+            if(tracks[ch]!=null&&engine.audioActive(ch)&&engine.audio(ch).equals(names[ch])){heard[ch]=generation;engine.takeAudioResume(ch);}
+            else{stop(ch);heard[ch]=-1;}
+        }
+        movieGeneration=-1;
+    }
+    public boolean inBackground(){return background;}
     private void syncTrack(int ch)throws Exception{
         if(heard[ch]!=engine.audioGeneration(ch)){
             if(ch==1)keepEffectRinging();
@@ -127,10 +146,10 @@ public final class DesktopMedia implements AutoCloseable {
     private void dropMovie(){movieRequest.incrementAndGet();movieLoading=false;if(movie!=null){closeMovie(movie);movie=null;}}
     private void stop(int n){
         request.incrementAndGet(n);Loaded loaded=ready.getAndSet(n,null);if(loaded!=null)loaded.track.stop();
-        if(tracks[n]!=null){tracks[n].stop();tracks[n]=null;}
+        if(tracks[n]!=null){if(n==0)tracks[n].fadeOut();else tracks[n].stop();tracks[n]=null;}
         if(clips[n]!=null){clips[n].stop();clips[n].close();clips[n]=null;}
     }
-    public void reset(){for(int n=0;n<6;n++)stop(n);Arrays.fill(heard,-1);movieGeneration=-1;dropMovie();if(olderEffect!=null){olderEffect.stop();olderEffect=null;}}
+    public void reset(){for(int n=0;n<6;n++)stop(n);Arrays.fill(heard,-1);movieGeneration=-1;dropMovie();stopRinging();}
     public void close(){reset();}
     /** Two decoder pipes, at most one published video frame; neither pipe accumulates the movie. */
     private static final class Movie implements AutoCloseable {

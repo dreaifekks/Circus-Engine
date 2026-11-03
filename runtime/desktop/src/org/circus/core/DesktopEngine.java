@@ -66,11 +66,15 @@ public abstract class DesktopEngine {
     /** A host may rebuild an identical menu while the button is held; the press still belongs to that control. */
     protected boolean keepsPointerAcrossRebuild(){return false;}
     private boolean pointerStale(int x,int y){if(ticket()==pointerTicket)return false;if(keepsPointerAcrossRebuild()&&sameControl(controlAt(x,y))){pointerTicket=ticket();return false;}return true;}
-    public void pointerMove(int x,int y)throws Exception{hover(x,y);if(!pointerHeld)return;if(pointerStale(x,y)){cancelPointer();return;}if(pointerDragging)drag(x,y,false);else pressed(x,y,sameControl(controlAt(x,y)));}
-    public void pointerUp(int x,int y)throws Exception{if(!pointerHeld)return;if(pointerStale(x,y)){cancelPointer();return;}boolean activate=sameControl(controlAt(x,y)),dragging=pointerDragging;pointerHeld=pointerDragging=false;pressed(x,y,false);if(dragging)endDrag();else if(activate)click(x,y,false);pointerControl=null;}
+    public void pointerMove(int x,int y)throws Exception{hover(x,y);if(!pointerHeld)return;if(!keepsPointerAcrossRebuild()&&pointerStale(x,y)){cancelPointer();return;}if(pointerDragging)drag(x,y,false);else pressed(x,y,sameControl(controlAt(x,y)));}
+    public void pointerUp(int x,int y)throws Exception{if(!pointerHeld)return;boolean anywhere=keepsPointerAcrossRebuild();if(!anywhere&&pointerStale(x,y)){cancelPointer();return;}boolean activate=anywhere||sameControl(controlAt(x,y)),dragging=pointerDragging;pointerHeld=pointerDragging=false;pressed(x,y,false);if(dragging)endDrag();else if(activate)click(x,y,false);pointerControl=null;}
     public void cancelPointer(){pointerHeld=pointerDragging=false;pointerControl=null;pressed(0,0,false);cancelDrag();}
     public void scroll(int units)throws Exception{}
     public abstract void hover(int x,int y)throws Exception;
+    /** Space and Enter; the default presses the middle of the screen. */
+    public void keyPress(boolean space)throws Exception{click(width/2,height/2,false);}
+    /** True once after a save was restored, as opposed to a menu closing and the story resuming. */
+    public boolean takeRestored(){return true;}
     public abstract BufferedImage render()throws IOException;
     public abstract List<Control> controls();
     public abstract String body();

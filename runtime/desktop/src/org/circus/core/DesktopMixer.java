@@ -53,7 +53,7 @@ final class DesktopMixer {
         private volatile double position,seek=-1;
         private volatile float targetLeft=1,targetRight=1;
         private float gainLeft=1,gainRight=1;
-        private volatile boolean stopping,finished;
+        private volatile boolean stopping,finished;private volatile int fadeBlocks;
 
         Track(byte[] pcm,int rate,int channels,int bits,boolean loop){
             this.pcm=pcm;this.rate=rate;this.channels=channels;wide=bits==16;this.loop=loop;
@@ -73,6 +73,9 @@ final class DesktopMixer {
         long framePosition(){return (long)position;}
         boolean finished(){return finished;}
         void stop(){stopping=true;}
+        boolean loops(){return loop;}
+        /** 429099: a replaced track falls away over about 120 ms instead of cutting off. */
+        void fadeOut(){fadeBlocks=20;}
 
         private float sample(int frame,int channel){
             int at=frame*frameBytes+(channels>1?channel:0)*(wide?2:1);
@@ -83,6 +86,7 @@ final class DesktopMixer {
             double jump=seek;if(jump>=0){position=jump;seek=-1;}
             double at=position;
             float endLeft=stopping?0:targetLeft,endRight=stopping?0:targetRight;
+            int fade=fadeBlocks;if(fade>0){float keep=(fade-1)/(float)fade;endLeft=gainLeft*keep;endRight=gainRight*keep;fadeBlocks=fade-1;if(fade==1)stopping=true;}
             for(int i=0;i<BLOCK_FRAMES;i++){
                 if(at>=frames){
                     if(!loop||frames==0){finished=true;break;}

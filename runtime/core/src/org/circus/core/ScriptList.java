@@ -14,6 +14,7 @@ public final class ScriptList {
     public Dc2Ui.Quad marker;
     public int columns=1,textStyle,hovered=-1;
     public boolean active(){return !items.isEmpty();}
+    public int size(){return items.size();}
     public void clear(){items.clear();common.clear();marker=null;columns=1;textStyle=0;hovered=-1;}
     public Item last()throws IOException{if(items.isEmpty())throw new IOException("List property without entry");return items.get(items.size()-1);}
     public void add(int[] a,int slot)throws IOException{

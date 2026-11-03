@@ -57,7 +57,7 @@ final class DesktopMac {
     /** The first CJK glyph makes macOS build its font fallback list, which stalled the first line of text for about 340 ms. */
     private static void warmFonts(){
         Graphics2D g=new BufferedImage(64,64,BufferedImage.TYPE_INT_ARGB).createGraphics();
-        try{g.setFont(new Font("Microsoft YaHei",Font.PLAIN,24));g.drawString("桜あア简體",0,32);}finally{g.dispose();}
+        try{for(String family:new String[]{"Microsoft YaHei","Hiragino Sans"}){g.setFont(new Font(family,Font.PLAIN,24));g.drawString("桜あア简體",0,32);}}finally{g.dispose();}
     }
 
     /** Cmd+Q closes the window, as the close button does, so progress is persisted. The API is newer than --release 8. */

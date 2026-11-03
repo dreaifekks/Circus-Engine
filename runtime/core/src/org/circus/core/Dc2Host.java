@@ -28,7 +28,9 @@ public class Dc2Host implements MesVm.ContextHost,MesVm.MenuHost,MesVm.ChoiceHos
     public final boolean[] audioLoop=new boolean[6],audioActive=new boolean[6];
     protected final Map<Integer,Integer> registers=new TreeMap<>(),optionBaseline=new TreeMap<>();
     public int musicAttenuation;public long endingClock,musicFadeRemaining;
-    public float musicFadeGain(){return musicFadeRemaining==0?1:musicFadeRemaining/1700f;}
+    protected long fadeOutMillis(){return 1700;}
+    private long musicFadeLength=1700;
+    public float musicFadeGain(){return musicFadeRemaining==0?1:musicFadeRemaining/(float)musicFadeLength;}
     protected Variables variables;protected MesScript script;protected int pc;
     protected long ticket,remaining;protected int audioMask,checkpoint,music=-1;
     public boolean exitRequested,skipAllowed=true;
@@ -133,6 +135,7 @@ public class Dc2Host implements MesVm.ContextHost,MesVm.MenuHost,MesVm.ChoiceHos
     public byte[] automaticMenuAction(){byte[] a=automaticMenuAction;automaticMenuAction=null;return a;}
     public byte[] menuAction(long expected,int button)throws IOException{if((!ui.waiting&&remaining>=0)||expected!=ticket)return null;if(button<0){String back=ui.actions[confirming?1:3];return back.isEmpty()?null:back.getBytes(Binary.SJIS);}require(button<ui.buttons.size(),"button index");String action=ui.buttons.get(button).action;if(confirming){if(action.equals(":y"))action=ui.actions[0];else if(action.equals(":n"))action=ui.actions[1];}return action.isEmpty()?null:action.getBytes(Binary.SJIS);}
     public void acceptMenuAction(int button)throws IOException{remaining=0;if(button>=0){registers.put(245,button);int sound=ui.buttons.get(button).clickSound;if(sound!=255)play(1,resources.named("sound",sound),false);if(!ui.buttons.get(button).voice.isEmpty())playVoice(ui.buttons.get(button).voice);}ui.waiting=false;ui.pressed=ui.hovered=-1;choiceCount=0;gridWaiting=confirming=false;}
+    public boolean effectsEnabled()throws IOException{return read(99,10)!=0;}
     public void hoverMenu(int button)throws IOException{if(button==ui.hovered)return;require(button>=-1&&button<ui.buttons.size(),"hover");ui.hovered=button;if(button>=0){registers.put(245,button);int sound=ui.buttons.get(button).hoverSound;if(sound!=255)play(1,resources.named("sound",sound),false);}}
     private static void require(boolean b,String detail)throws IOException{if(!b)throw new IOException("Unimplemented DM "+detail);}
     private String text(byte[] b)throws IOException{return TextCodec.cp932(b);}
@@ -165,7 +168,7 @@ public class Dc2Host implements MesVm.ContextHost,MesVm.MenuHost,MesVm.ChoiceHos
                 Dc2Ui.Quad copy=Dc2Ui.copyQuads(Collections.singletonList(q)).get(0);if(copy.type==2){copy.width=23;copy.height=copy.flags;}captured.quads.add(copy);
             }
         }
-        SceneCaptures.legacySliders(captured,ui,variables);UiCapture next=SceneCaptures.legacy(captured,scene,ui,variables,read(99,10)!=0,uiCapture);uiCapture=captureRenderer==null?next:captureRenderer.flatten(next);
+        SceneCaptures.legacySliders(captured,ui,variables);UiCapture next=SceneCaptures.legacy(captured,scene,ui,variables,effectsEnabled(),uiCapture);uiCapture=captureRenderer==null?next:captureRenderer.flatten(next);
         scene.slots[1]="@ui-capture";Arrays.fill(scene.slots,2,10,"");scene.backgroundX=scene.backgroundY=0;
     }
     public boolean command(String op,int[] a,byte[] bytes)throws IOException{
@@ -261,7 +264,7 @@ public class Dc2Host implements MesVm.ContextHost,MesVm.MenuHost,MesVm.ChoiceHos
         case "dm.audio.completion_action":require(bytes.length==0,"music completion label");return true; // 4305CA clears C22490 on music-room exit.
         case "dm.audio.music_attenuation":musicAttenuation=a[0];return true;
         // 42E91C -> 435E60 starts BGM fade; 432A9E subsequently waits for its completion.
-        case "dm.audio.fade_music":if(audioActive[0]&&musicFadeRemaining==0)musicFadeRemaining=1700;return true;
+        case "dm.audio.fade_music":if(audioActive[0]&&musicFadeRemaining==0)musicFadeRemaining=musicFadeLength=fadeOutMillis();return true;
         case "dm.audio.sound":if(a[0]==-2){play(5,"",false);return true;}if(a[0]==-1){play(1,"",false);return true;}require(a[0]>=0,"sound control");play(1,resources.named("sound",a[0]),a[1]!=0);return true;
         case "dm.audio.music":if(a[0]==255){play(0,"",false);music=-1;return true;}require(a[0]>=0&&a[0]<400&&a[1]>=0&&a[1]<=2,"music mode");if(a[1]!=1||music!=a[0])play(0,resources.named("music",a[0]),a[1]!=2);music=a[0];state.write(96,music,1);return true;
         case "wait.audio":audioMask=a[0];pollAudio();if(audioMask!=0)nextTicket();return true;
