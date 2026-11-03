@@ -62,6 +62,23 @@ python tools/package_desktop.py --jdk <JDK21> --ffmpeg <ffmpeg.exe> --version 0.
 产物 `build/distribution/dc-runtime-0.13.11-pc-dev-windows-x64/`，双击 `DC Runtime.cmd`，
 再选游戏目录。包内自带 JRE 和 FFmpeg，不需要另装 Java；存档写在包目录的 `saves/`。
 
+### macOS（Apple Silicon）
+
+```sh
+python3 tools/package_macos.py
+```
+
+产物 `build/distribution/DC Runtime.app`，双击或 `open` 启动，选包含 `AdvData` 或 `DC3_Data` 的目录。
+需要 Python 3.10+ 和 Xcode Command Line Tools。首次运行会下载 Temurin 21 和 FFmpeg 源码并编译，
+放在 `build/macos-tools/`，约一分钟；之后复用。包内自带 JRE 和静态 FFmpeg，不依赖系统 Java 和 Homebrew，
+只做 ad-hoc 签名，供本机使用。
+
+- 存档和影片缓存在 `~/Library/Application Support/DC Runtime/`。
+- 下次启动直接进上次的游戏。换游戏用菜单「游戏 → 选择其他游戏目录…」（⌘O）；
+  删除同目录下的 `last-game.txt` 也会重新询问。
+- 功能键常被系统占用，菜单里有等效快捷键：快速保存 ⌘S、快速读取 ⌘L、全屏 ⌃⌘F。
+- 游戏放在「文稿」「下载」或外接盘时，系统会询问访问权限；重新打包后可能再问一次。
+
 ## 操作（Android）
 
 | 操作 | 作用 |
@@ -104,12 +121,13 @@ docs/               VM 规范、各版本兼容性、版本记录
 
 ## 构建与测试
 
-需要 Python 3.10+、JDK 17+；打包 Android 另需上述 SDK／NDK。脚本不下载工具链、不依赖 Gradle。
+需要 Python 3.10+、JDK 17+；打包 Android 另需上述 SDK／NDK。脚本不依赖 Gradle；除 macOS 打包外不下载工具链。
 
 ```powershell
 python -m unittest discover -s tests            # 47 项 Python 测试
 python tools/build_android.py --java-home ...   # APK，内含 997 项 JVM 断言
 python tools/package_desktop.py ...             # Windows 包
+python3 tools/package_macos.py                  # macOS 包
 ```
 
 构建报告和签名校验在 `build/android/`，模拟器证据在 `build/android-smoke/`。

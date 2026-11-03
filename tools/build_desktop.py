@@ -9,7 +9,7 @@ import subprocess
 ROOT = Path(__file__).resolve().parent.parent
 
 def build(java_home=None):
-    javac = str(Path(java_home)/'bin/javac.exe') if java_home else shutil.which('javac')
+    javac = str(Path(java_home)/'bin'/('javac.exe' if os.name == 'nt' else 'javac')) if java_home else shutil.which('javac')
     if not javac:
         raise RuntimeError('A JDK 17+ is required; set JAVA_HOME or pass --java-home')
     java = str(Path(javac).with_name('java.exe' if os.name == 'nt' else 'java'))
