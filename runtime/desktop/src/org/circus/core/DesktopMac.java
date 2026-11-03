@@ -47,6 +47,7 @@ final class DesktopMac {
     static void prepare(){
         if(System.getProperty("dc.saveRoot")==null)System.setProperty("dc.saveRoot",SUPPORT.resolve("saves").toString());
         if(System.getProperty("dc.cacheRoot")==null)System.setProperty("dc.cacheRoot",SUPPORT.resolve("cache").toString());
+        PcHost.followsExe=true;
         System.setProperty("apple.laf.useScreenMenuBar","true");
         System.setProperty("apple.awt.application.name","DC Runtime");
         try{UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());}catch(ReflectiveOperationException|UnsupportedLookAndFeelException e){System.err.println(e);}

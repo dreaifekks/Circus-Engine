@@ -9,6 +9,8 @@ public final class PcHost extends Dc2Host {
     public final PcNameInput nameInput=new PcNameInput();public String familyName,givenName;public final boolean second;public final Pc2Map map=new Pc2Map();public final PcCredits pcCredits=new PcCredits();
     private final List<String> voiceGroup=new ArrayList<>();
     private final byte[] globals=new byte[100],cg=new byte[1600],seen=new byte[1600],voiceEnabled=new byte[128],scratch=new byte[100];
+    /** Set by the Mac app, where the DC2PC input path follows the exe. */
+    public static boolean followsExe;
     public final ScriptList list=new ScriptList();private boolean gridTarget;private String musicEndAction="";
     private int spriteFlags;private int randomState=0x63c25769;private boolean timedInput;
     private boolean pendingRegionFlag;
@@ -121,6 +123,7 @@ public final class PcHost extends Dc2Host {
         String text=new String(bytes,Binary.SJIS);
         switch(op){
         case "dm.audio.voice":lineVoice=voiceStops(text)?"":text;playVoice(text);return true;
+        case "dm.ui.button_voice":super.command(op,a,bytes);if(followsExe&&second)ui.last().clickSound=255;return true; // 4248F8: a click voice replaces the click sound.
         case "ui.music_end_action":musicEndAction=text;return true;
         case "host.command_with_string":{
             gridTarget=false;super.command(op,a,bytes);

@@ -63,8 +63,11 @@ public abstract class DesktopEngine {
     private Control controlAt(int x,int y){List<Control> list=controls();for(int n=list.size()-1;n>=0;n--)if(list.get(n).contains(x,y))return list.get(n);return null;}
     private boolean sameControl(Control current){return pointerControl==null?current==null:current!=null&&pointerControl.action.equals(current.action)&&pointerControl.left==current.left&&pointerControl.top==current.top&&pointerControl.right==current.right&&pointerControl.bottom==current.bottom;}
     public void pointerDown(int x,int y)throws Exception{cancelPointer();hover(x,y);pointerHeld=true;pointerTicket=ticket();pointerControl=controlAt(x,y);pointerDragging=drag(x,y,true);if(!pointerDragging)pressed(x,y,true);}
-    public void pointerMove(int x,int y)throws Exception{hover(x,y);if(!pointerHeld)return;if(ticket()!=pointerTicket){cancelPointer();return;}if(pointerDragging)drag(x,y,false);else pressed(x,y,sameControl(controlAt(x,y)));}
-    public void pointerUp(int x,int y)throws Exception{if(!pointerHeld)return;if(ticket()!=pointerTicket){cancelPointer();return;}boolean activate=sameControl(controlAt(x,y)),dragging=pointerDragging;pointerHeld=pointerDragging=false;pressed(x,y,false);if(dragging)endDrag();else if(activate)click(x,y,false);pointerControl=null;}
+    /** A host may rebuild an identical menu while the button is held; the press still belongs to that control. */
+    protected boolean keepsPointerAcrossRebuild(){return false;}
+    private boolean pointerStale(int x,int y){if(ticket()==pointerTicket)return false;if(keepsPointerAcrossRebuild()&&sameControl(controlAt(x,y))){pointerTicket=ticket();return false;}return true;}
+    public void pointerMove(int x,int y)throws Exception{hover(x,y);if(!pointerHeld)return;if(pointerStale(x,y)){cancelPointer();return;}if(pointerDragging)drag(x,y,false);else pressed(x,y,sameControl(controlAt(x,y)));}
+    public void pointerUp(int x,int y)throws Exception{if(!pointerHeld)return;if(pointerStale(x,y)){cancelPointer();return;}boolean activate=sameControl(controlAt(x,y)),dragging=pointerDragging;pointerHeld=pointerDragging=false;pressed(x,y,false);if(dragging)endDrag();else if(activate)click(x,y,false);pointerControl=null;}
     public void cancelPointer(){pointerHeld=pointerDragging=false;pointerControl=null;pressed(0,0,false);cancelDrag();}
     public void scroll(int units)throws Exception{}
     public abstract void hover(int x,int y)throws Exception;

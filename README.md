@@ -135,6 +135,7 @@ python3 tools/package_macos.py                  # macOS 包
 ## 文档
 
 - [版本记录](docs/RELEASES.md)｜[解包与静态分析工具](docs/TOOLING.md)
+- [D.C.II P.C. 输入对照原版](docs/DC2PC_INPUT.md)
 - [PC 兼容性说明](docs/PC_COMPATIBILITY.md)｜[VM 规范](docs/VM_SPECIFICATION.md)｜[架构边界](docs/ARCHITECTURE.md)
 - [MES 语义表](docs/MES_SEMANTICS.md)｜[静态分析](docs/STATIC_ANALYSIS.md)
 

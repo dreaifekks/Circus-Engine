@@ -38,7 +38,7 @@ public final class DesktopLegacy extends DesktopEngine {
     public MesVm vm(){return session.vm;}
     private boolean timedInput(){return host() instanceof PcHost&&((PcHost)host()).hasTimedInput();}
     public void tick(long elapsed)throws Exception {
-        Dc2Host h=host();h.fullscreen=fullscreenRequested;session.vm.elapse(elapsed);
+        Dc2Host h=host();if(pointerButton!=null&&h.ui.waiting&&h.ui.hovered<0&&followsPc2Exe())hoverPc2(pointerX,pointerY);h.fullscreen=fullscreenRequested;session.vm.elapse(elapsed);
         if(h.presentationWaiting||h.textWaiting){if(textTicket!=h.waitTicket()){textClock=0;textTicket=h.waitTicket();}textClock+=elapsed;if(textClock>=textDuration())session.vm.signalHost(h.waitTicket(),MesVm.HostSignal.TEXT_COMPLETE);}
         if(h.returnRequested){session.returnToStory();finishSystemAudio();h=host();}
         MesVm.Status status=session.vm.run(1000);if(status==MesVm.Status.FAULT)throw new IOException(session.vm.error());session.observeTransfer();if(h.windowRequest>=0){fullscreenRequested=h.windowRequest!=0;h.windowRequest=-1;}
@@ -61,7 +61,8 @@ public final class DesktopLegacy extends DesktopEngine {
         if(!right&&drag(x,y,true)){endDrag();return;}
         if(!right&&h instanceof PcHost&&h.gridWaiting){PcHost p=(PcHost)h;if(p.list.active()){int offset=p.list.scrollAt(x,y,p.gridBounds,p.read(99,246),p.grid.size());if(offset>=0){p.write(99,246,offset);return;}}}
         java.util.List<Dc2Ui.Button> bs=buttons();
-        if(!right)for(int n=bs.size()-1;n>=0;n--){Dc2Ui.Button b=bs.get(n);if(x>=b.left&&x<b.right&&y>=b.top&&y<b.bottom&&!b.action.isEmpty()){
+        boolean exe=followsPc2Exe(); // 411ED0: the first enabled button under the pointer takes the click.
+        if(!right)for(int k=0;k<bs.size();k++){int n=exe?k:bs.size()-1-k;Dc2Ui.Button b=bs.get(n);if(exe&&((b.flags&2)!=0||hiddenButton(b)))continue;if(x>=b.left&&x<b.right&&y>=b.top&&y<b.bottom&&!b.action.isEmpty()){
             if(h instanceof PcHost&&h.history.active&&(b.action.equals(":close")||b.action.equals(":change"))){action(b.action);return;}
             for(Dc2Ui.Quad q:b.sprites)if(q.state==5){int value=(int)Math.round(Math.max(0,Math.min(1,(x-q.x)/(double)Math.max(1,q.y-q.x)))*Math.max(0,q.sx-1));session.vm.variables.write(q.sy,q.width,value);}
             if(b.action.startsWith("@slot:"))session.vm.activateGrid(h.waitTicket(),Integer.parseInt(b.action.substring(6)));else if(h.ui.waiting)session.vm.activateMenu(h.waitTicket(),n);else{h.toolbarSound(b);action(b.action);}return;}}
@@ -119,7 +120,41 @@ public final class DesktopLegacy extends DesktopEngine {
         else session.openSystem(action);
         toolbar=auto=rapid=false;return true;
     }
-    public void hover(int x,int y)throws IOException{int old=hovered;hovered=-1;java.util.List<Dc2Ui.Button> bs=buttons();for(int n=0;n<bs.size();n++){Dc2Ui.Button b=bs.get(n);if(x>=b.left&&x<b.right&&y>=b.top&&y<b.bottom)hovered=n;}if(host().ui.waiting)host().hoverMenu(hovered<host().ui.buttons.size()?hovered:-1);else if(old!=hovered&&hovered>=0&&bs.get(hovered).hoverSound!=255)host().play(1,resources.named("sound",bs.get(hovered).hoverSound),false);if(host() instanceof PcHost){Pc2Map m=((PcHost)host()).map;if(m.active&&m.selected<0){m.hovered=-1;for(int n=0;n<m.regions().length;n++){int[] r=m.regions()[n];if(x>=r[0]&&x<r[2]&&y>=r[1]&&y<r[3])m.hovered=n;}}}}
+    /** The Mac app follows DC2PC.exe here. Other builds of the game have not been read, so they keep the shared path. */
+    private boolean followsPc2Exe(){return PcHost.followsExe&&host() instanceof PcHost&&((PcHost)host()).second;}
+    @Override protected boolean keepsPointerAcrossRebuild(){return followsPc2Exe();}
+    private int pointerX,pointerY;private String pointerButton;
+    /** 41B740: bit 15 inverts the variable test that hides a button. */
+    private boolean hiddenButton(Dc2Ui.Button b)throws IOException{
+        if(b.binding==0)return false;
+        int value=session.vm.variables.read((b.binding>>8)&127,b.binding&255);
+        return (b.binding&0x8000)!=0?value!=0:value==0;
+    }
+    /**
+     * 41D530, 411B90 and 412B60. Menu and text waits track the pointer; timed waits do not. The first enabled button
+     * under the pointer wins, "*" continues the button before it, and a sound plays only on reaching another button.
+     * One departure: the exe forgets the hovered button whenever a script rebuilds the menu, and its music page rebuilds
+     * every frame while nothing plays. The same button under the pointer stays silent here.
+     */
+    private void hoverPc2(int x,int y)throws IOException{
+        PcHost h=(PcHost)host();pointerX=x;pointerY=y;
+        if(h.map.active&&h.map.selected<0){h.map.hovered=-1;for(int n=0;n<h.map.regions().length;n++){int[] r=h.map.regions()[n];if(x>=r[0]&&x<r[2]&&y>=r[1]&&y<r[3])h.map.hovered=n;}}
+        if(timedInput()||(!h.ui.waiting&&!h.textWaiting))return;
+        java.util.List<Dc2Ui.Button> all=buttons();int grids=h.gridWaiting?h.grid.size():0,plain=all.size()-grids,row=-1,hit=-1;
+        for(int n=0;n<grids&&row<0;n++){Dc2Ui.Button b=h.grid.get(n);if(x>=b.left&&x<b.right&&y>=b.top&&y<b.bottom)row=n;}
+        if(row>=0&&h.list.active()){ScriptList.Item item=h.list.at(h.read(99,246),row,grids);if(item==null||item.action.isEmpty())row=-1;}
+        if(grids>0){
+            int current=h.read(99,253);if(current==255)current=-1;
+            if(row!=current){if(row>=0&&h.gridHoverSound!=255)h.play(1,resources.named("sound",h.gridHoverSound),false);h.write(99,253,row);}
+        }
+        for(int n=0;n<plain&&hit<0;n++){Dc2Ui.Button b=all.get(n);if((b.flags&2)==0&&!hiddenButton(b)&&x>b.left&&x<b.right&&y>b.top&&y<b.bottom)hit=n;}
+        if(hit>0&&all.get(hit).action.equals("*"))hit--;
+        String button=null;
+        if(hit>=0){Dc2Ui.Button b=all.get(hit);button=b.action+'@'+b.left+','+b.top+','+b.right+','+b.bottom;if(!button.equals(pointerButton)&&b.flags!=12&&b.hoverSound!=255)h.play(1,resources.named("sound",b.hoverSound),false);}
+        pointerButton=button;hovered=hit>=0?hit:row>=0?plain+row:-1;
+        if(h.ui.waiting){h.ui.hovered=hit;if(hit>=0)h.registers.put(245,hit);}
+    }
+    public void hover(int x,int y)throws IOException{if(followsPc2Exe()){hoverPc2(x,y);return;}int old=hovered;hovered=-1;java.util.List<Dc2Ui.Button> bs=buttons();for(int n=0;n<bs.size();n++){Dc2Ui.Button b=bs.get(n);if(x>=b.left&&x<b.right&&y>=b.top&&y<b.bottom)hovered=n;}if(host().ui.waiting)host().hoverMenu(hovered<host().ui.buttons.size()?hovered:-1);else if(old!=hovered&&hovered>=0&&bs.get(hovered).hoverSound!=255)host().play(1,resources.named("sound",bs.get(hovered).hoverSound),false);if(host() instanceof PcHost){Pc2Map m=((PcHost)host()).map;if(m.active&&m.selected<0){m.hovered=-1;for(int n=0;n<m.regions().length;n++){int[] r=m.regions()[n];if(x>=r[0]&&x<r[2]&&y>=r[1]&&y<r[3])m.hovered=n;}}}}
     public java.util.List<Control> controls(){java.util.List<Control> out=new ArrayList<>();for(Dc2Ui.Button b:buttons())if(!b.action.isEmpty())out.add(new Control(b.action,b.left,b.top,b.right,b.bottom));if(host() instanceof PcHost&&((PcHost)host()).nameInput.active){PcNameInput name=((PcHost)host()).nameInput;if(name.confirming)return out;for(int n=0;n<8;n++){int x=336+(n/4)*192+(n%4)*32;out.add(new Control("@name:field:"+n,x,40,x+32,72));}java.util.List<String> rows=name.visibleRows();for(int r=0;r<rows.size();r++)for(int c=0;c<Math.min(17,rows.get(r).length());c++){int x=280+c*24,y=96+r*24+(r>=4?8:0);if(rows.get(r).charAt(c)!='　')out.add(new Control("@name:char:"+(r*17+c),x,y,x+24,y+24));}}return out;}
     private int textSpeed()throws IOException{return host().read(99,host() instanceof PcHost?13:auto?27:26);}
     private long textDuration()throws IOException{return TextPlayback.duration(resources.profile.id,textSpeed(),body().codePointCount(0,body().length()));}
