@@ -1,10 +1,16 @@
 package org.circus.core;
 
+import java.awt.AlphaComposite;
 import java.awt.Desktop;
+import java.awt.Font;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.awt.event.ActionListener;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
+import java.awt.image.BufferedImage;
+import java.awt.image.VolatileImage;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
@@ -16,7 +22,26 @@ final class DesktopMac {
     private static final Path SUPPORT=Paths.get(System.getProperty("user.home"),"Library","Application Support","DC Runtime");
     private static final Path LAST_GAME=SUPPORT.resolve("last-game.txt");
 
+    /** A 16 ms Swing timer fires about every 20 ms on a Mac; 14 ms gives the intended 60 frames a second. */
+    static final int FRAME_DELAY=14;
+
     private DesktopMac(){}
+
+    /**
+     * Smooth scaling on a BufferedImage replaced every frame runs in software, at 65 ms a frame in full screen.
+     * Copied to a VolatileImage first, the GPU scales it in about 2 ms. Whole multiples stay sharp.
+     */
+    static final class Scaler {
+        private VolatileImage target;
+        void draw(Graphics2D g,JComponent owner,BufferedImage image,int x,int y,int w,int h){
+            if(target==null||target.getWidth()!=image.getWidth()||target.getHeight()!=image.getHeight()||target.validate(owner.getGraphicsConfiguration())==VolatileImage.IMAGE_INCOMPATIBLE)target=owner.createVolatileImage(image.getWidth(),image.getHeight());
+            Graphics2D copy=target.createGraphics();
+            try{copy.setComposite(AlphaComposite.Src);copy.drawImage(image,0,0,null);}finally{copy.dispose();}
+            double device=g.getTransform().getScaleX()*w/image.getWidth();
+            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,device==Math.rint(device)?RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR:RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            g.drawImage(target,x,y,w,h,null);
+        }
+    }
 
     /** Runs before AWT starts: from an app the working directory is /, so the build/ defaults cannot work. */
     static void prepare(){
@@ -25,6 +50,13 @@ final class DesktopMac {
         System.setProperty("apple.laf.useScreenMenuBar","true");
         System.setProperty("apple.awt.application.name","DC Runtime");
         try{UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());}catch(ReflectiveOperationException|UnsupportedLookAndFeelException e){System.err.println(e);}
+        Thread fonts=new Thread(DesktopMac::warmFonts,"dc-font-warmup");fonts.setDaemon(true);fonts.start();
+    }
+
+    /** The first CJK glyph makes macOS build its font fallback list, which stalled the first line of text for about 340 ms. */
+    private static void warmFonts(){
+        Graphics2D g=new BufferedImage(64,64,BufferedImage.TYPE_INT_ARGB).createGraphics();
+        try{g.setFont(new Font("Microsoft YaHei",Font.PLAIN,24));g.drawString("桜あア简體",0,32);}finally{g.dispose();}
     }
 
     /** Cmd+Q closes the window, as the close button does, so progress is persisted. The API is newer than --release 8. */

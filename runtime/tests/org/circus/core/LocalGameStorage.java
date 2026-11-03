@@ -24,7 +24,7 @@ public final class LocalGameStorage implements GameResources.Storage {
             @Override public Archive.Reader openReader()throws IOException{
                 final RandomAccessFile file=new RandomAccessFile(p.toFile(),"r");return new Archive.Reader(){
                     public long size()throws IOException{return file.length();}
-                    public byte[] read(long at,int count)throws IOException{Binary.range(at,count,file.length());byte[] bytes=new byte[count];file.seek(at);file.readFully(bytes);return bytes;}
+                    public synchronized byte[] read(long at,int count)throws IOException{Binary.range(at,count,file.length());byte[] bytes=new byte[count];file.seek(at);file.readFully(bytes);return bytes;}
                     public void close()throws IOException{file.close();}
                 };
             }

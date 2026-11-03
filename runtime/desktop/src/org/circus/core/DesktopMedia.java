@@ -4,6 +4,8 @@ import java.awt.image.*;
 import java.io.*;
 import java.nio.file.*;
 import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.*;
 import javax.sound.sampled.*;
 
 /** Java Sound output and bounded FFmpeg pipes. No Windows game binaries are loaded. */
@@ -13,8 +15,54 @@ public final class DesktopMedia implements AutoCloseable {
     private final int[] heard={-1,-1,-1,-1,-1,-1};
     private final Clip[] clips=new Clip[6];private Movie movie;
     private int movieGeneration=-1;private long movieTicket;
+    private boolean movieLoading;private final AtomicLong movieRequest=new AtomicLong();private final AtomicReference<Movie> movieReady=new AtomicReference<>();
     public final Set<String> decodedMovies=new TreeSet<>();
+    // Opening, starting, stopping and closing a Clip block for 30-120 ms, and close can block for 2 s.
+    // A window must not wait for that on its event thread, so it hands them to these daemon threads.
+    private static final ThreadFactory DAEMON=task->{Thread t=new Thread(task,"dc-audio");t.setDaemon(true);return t;};
+    private static final ExecutorService LOADERS=Executors.newFixedThreadPool(3,DAEMON),RELEASERS=Executors.newCachedThreadPool(DAEMON);
+    private boolean background;
+    private final AtomicLongArray request=new AtomicLongArray(6);
+    private final AtomicReferenceArray<Loaded> ready=new AtomicReferenceArray<>(6);
+    private final AtomicReference<Exception> failure=new AtomicReference<>();
+    private static final class Loaded {final long id;final Clip clip;Loaded(long id,Clip clip){this.id=id;this.clip=clip;}}
     public DesktopMedia(DesktopEngine e){engine=e;}
+    /** Audits keep the default: every sound is playing when sync returns. */
+    public void playInBackground(){background=true;}
+    private static byte[] pcm(Xpcm audio)throws Exception{return audio.codec.equals("ogg")?decodeOgg(audio.payload):audio.payload;}
+    private static Clip open(Xpcm audio,byte[] pcm)throws Exception{
+        AudioFormat format=audio.codec.equals("ogg")?new AudioFormat(44100,16,2,true,false):new AudioFormat(audio.sampleRate,audio.bits,audio.channels,audio.bits==16,false);
+        Clip clip=AudioSystem.getClip();try{clip.open(format,pcm,0,pcm.length);}catch(Exception e){clip.close();throw e;}return clip;
+    }
+    /** Runs on the event thread: everything read from the engine is read here, the slow work happens on a loader. */
+    private void load(int ch)throws IOException{
+        final String name=engine.audio(ch);engine.loadedAudio.add(name);
+        final long resume=engine.takeAudioResume(ch);if(resume>0)engine.audioPosition(ch,resume,0);
+        final boolean loop=engine.audioLoop(ch);final float volume=engine.volume(ch);final int pan=engine.pan(ch);sought[ch]=engine.audioSeekGeneration(ch);
+        // Unity bundles cannot be exercised here without game data, so their reads stay on this thread.
+        final Xpcm read=engine.resources instanceof UnityCircusResources?engine.resources.audio(name):null;
+        final long id=request.get(ch);
+        LOADERS.execute(()->{
+            Clip clip=null;
+            try{
+                if(request.get(ch)!=id)return;
+                Xpcm audio=read!=null?read:engine.resources.audio(name);byte[] pcm=pcm(audio);
+                if(request.get(ch)!=id)return;
+                clip=open(audio,pcm);gain(clip,volume);balance(clip,pan);
+                if(resume>0)clip.setMicrosecondPosition(Math.min(resume,Math.max(0,clip.getMicrosecondLength()-1)));
+                if(request.get(ch)!=id){release(clip);return;}
+                if(loop)clip.loop(Clip.LOOP_CONTINUOUSLY);else clip.start();
+                publish(ch,new Loaded(id,clip));
+            }catch(Exception e){if(clip!=null)release(clip);if(request.get(ch)==id)failure.compareAndSet(null,e);}
+        });
+    }
+    /** Loaders can finish out of order: the newest request stays, and the other clip must not be dropped still open. */
+    private void publish(int ch,Loaded mine){
+        Loaded loser=mine;
+        synchronized(ready){Loaded held=ready.get(ch);if(held==null||held.id<mine.id){ready.set(ch,mine);loser=held;}}
+        if(loser!=null)release(loser.clip);
+    }
+    private void release(Clip clip){RELEASERS.execute(()->{clip.stop();clip.close();});}
     public static String ffmpeg()throws IOException{String executable=System.getProperty("dc.ffmpeg",System.getenv("DC_FFMPEG"));if(executable==null||executable.isEmpty())throw new IOException("FFmpeg is required for Ogg/movie playback. Set DC_FFMPEG to its executable.");return executable;}
     private static Process process(String... args)throws IOException{List<String> command=new ArrayList<>();command.add(ffmpeg());Collections.addAll(command,"-nostdin","-hide_banner","-loglevel","error");Collections.addAll(command,args);Process p=new ProcessBuilder(command).start();Thread errors=new Thread(()->{try(InputStream in=p.getErrorStream()){byte[] b=new byte[4096];int n,total=0;while((n=in.read(b))!=-1){if(total<16384)System.err.write(b,0,Math.min(n,16384-total));total+=n;}}catch(IOException ignored){}},"dc-media-diagnostics");errors.setDaemon(true);errors.start();return p;}
     public static byte[] decodeOgg(byte[] ogg)throws Exception{
@@ -23,21 +71,25 @@ public final class DesktopMedia implements AutoCloseable {
         try{byte[] pcm=Binary.read(p.getInputStream(),128*1024*1024);int exit=p.waitFor();input.join();if(exit!=0||error[0]!=null)throw new IOException("Ogg decoder failed ("+exit+")",error[0]);return pcm;}finally{p.destroy();}
     }
     public void sync()throws Exception{
+        Exception failed=failure.getAndSet(null);if(failed!=null)throw new IOException("Audio playback failed",failed);
         for(int ch=0;ch<6;ch++){
             if(heard[ch]!=engine.audioGeneration(ch)){
                 stop(ch);heard[ch]=engine.audioGeneration(ch);if(engine.audio(ch).isEmpty()||!engine.audioActive(ch))continue;
-                Xpcm audio=engine.resources.audio(engine.audio(ch));engine.loadedAudio.add(engine.audio(ch));byte[] pcm=audio.codec.equals("ogg")?decodeOgg(audio.payload):audio.payload;
+                if(background){load(ch);continue;}
+                Xpcm audio=engine.resources.audio(engine.audio(ch));engine.loadedAudio.add(engine.audio(ch));byte[] pcm=pcm(audio);
                 if(engine.audit){engine.audioCompleted(ch,heard[ch]);continue;}
-                AudioFormat format=audio.codec.equals("ogg")?new AudioFormat(44100,16,2,true,false):new AudioFormat(audio.sampleRate,audio.bits,audio.channels,audio.bits==16,false);
-                Clip clip=AudioSystem.getClip();try{clip.open(format,pcm,0,pcm.length);}catch(Exception e){clip.close();throw e;}clips[ch]=clip;long resume=engine.takeAudioResume(ch);if(resume>0)clip.setMicrosecondPosition(Math.min(resume,Math.max(0,clip.getMicrosecondLength()-1)));sought[ch]=engine.audioSeekGeneration(ch);if(engine.audioLoop(ch))clip.loop(Clip.LOOP_CONTINUOUSLY);else clip.start();
+                Clip clip=open(audio,pcm);clips[ch]=clip;long resume=engine.takeAudioResume(ch);if(resume>0)clip.setMicrosecondPosition(Math.min(resume,Math.max(0,clip.getMicrosecondLength()-1)));sought[ch]=engine.audioSeekGeneration(ch);if(engine.audioLoop(ch))clip.loop(Clip.LOOP_CONTINUOUSLY);else clip.start();
             }
+            Loaded loaded=ready.getAndSet(ch,null);if(loaded!=null){if(loaded.id==request.get(ch))clips[ch]=loaded.clip;else release(loaded.clip);}
             Clip clip=clips[ch];if(clip!=null){if(sought[ch]!=engine.audioSeekGeneration(ch)){sought[ch]=engine.audioSeekGeneration(ch);clip.setMicrosecondPosition(clip.getMicrosecondLength()*Math.max(0,Math.min(100,engine.audioSeekPercent(ch)))/100);}engine.audioPosition(ch,clip.getMicrosecondPosition(),clip.getMicrosecondLength());gain(clip,engine.volume(ch));balance(clip,engine.pan(ch));if(!engine.audioActive(ch)){stop(ch);continue;}if(!engine.audioLoop(ch)&&!clip.isRunning()&&clip.getFramePosition()>=clip.getFrameLength()){engine.audioCompleted(ch,heard[ch]);stop(ch);}}
         }
         if(!engine.movie().isEmpty()&&movieGeneration!=engine.movieGeneration()){
             movieGeneration=engine.movieGeneration();movieTicket=engine.ticket();for(int ch=0;ch<6;ch++)stop(ch);
             if(engine.audit){engine.resources.files.slice(engine.movie(),0,4);decodedMovies.add(engine.movie());engine.mediaCompleted(movieTicket);return;}
-            movie=new Movie(engine.resources.files,engine.movie(),engine.width,engine.height);decodedMovies.add(engine.movie());
+            decodedMovies.add(engine.movie());
+            if(background)loadMovie();else movie=new Movie(engine.resources.files,engine.movie(),engine.width,engine.height,0);
         }
+        Movie opened=movieReady.getAndSet(null);if(opened!=null){if(movieLoading&&opened.id==movieRequest.get()){movie=opened;movieLoading=false;}else closeMovie(opened);}
         if(movie!=null){if(movie.error!=null)throw new IOException("Movie playback failed",movie.error);if(movie.videoDone&&movie.audioDone)finishMovie();}
     }
     private static void balance(Line line,int pan){FloatControl.Type type=line.isControlSupported(FloatControl.Type.BALANCE)?FloatControl.Type.BALANCE:FloatControl.Type.PAN;if(line.isControlSupported(type)){FloatControl c=(FloatControl)line.getControl(type);float value=pan==0?0:Math.copySign((float)(1-Math.pow(10,-Math.abs(pan)/2000.0)),pan);c.setValue(Math.max(c.getMinimum(),Math.min(c.getMaximum(),value)));}}
@@ -45,16 +97,32 @@ public final class DesktopMedia implements AutoCloseable {
     public BufferedImage movieFrame(){return movie==null?null:movie.frame;}
     public long audioFrames(int ch){return clips[ch]==null?0:clips[ch].getLongFramePosition();}
     public long movieAudioFrames(){return movie==null||movie.line==null?0:movie.line.getLongFramePosition();}
-    public boolean playingMovie(){return movie!=null;}
-    public void finishMovie()throws IOException{if(movie!=null){movie.close();movie=null;}engine.mediaCompleted(movieTicket);}
-    private void stop(int n){if(clips[n]!=null){clips[n].stop();clips[n].close();clips[n]=null;}}
-    public void reset(){for(int n=0;n<6;n++)stop(n);Arrays.fill(heard,-1);movieGeneration=-1;if(movie!=null){movie.close();movie=null;}}
+    public boolean playingMovie(){return movie!=null||movieLoading;}
+    public void finishMovie()throws IOException{dropMovie();engine.mediaCompleted(movieTicket);}
+    private void loadMovie(){
+        final GameResources files=engine.resources.files;final String name=engine.movie();final int width=engine.width,height=engine.height;
+        final long id=movieRequest.incrementAndGet();movieLoading=true;
+        LOADERS.execute(()->{
+            try{Movie opened=new Movie(files,name,width,height,id);Movie loser=movieReady.getAndSet(opened);if(loser!=null)closeMovie(loser);}
+            catch(Exception e){if(movieRequest.get()==id)failure.compareAndSet(null,e);}
+        });
+    }
+    private void closeMovie(Movie m){if(background)RELEASERS.execute(m::close);else m.close();}
+    private void dropMovie(){movieRequest.incrementAndGet();movieLoading=false;if(movie!=null){closeMovie(movie);movie=null;}}
+    private void stop(int n){
+        request.incrementAndGet(n);Loaded loaded=ready.getAndSet(n,null);if(loaded!=null)release(loaded.clip);
+        Clip clip=clips[n];clips[n]=null;if(clip==null)return;
+        // The mute is immediate, so a slow stop never overlaps the sound that replaces this one.
+        if(background){gain(clip,0);release(clip);}else{clip.stop();clip.close();}
+    }
+    public void reset(){for(int n=0;n<6;n++)stop(n);Arrays.fill(heard,-1);movieGeneration=-1;dropMovie();}
     public void close(){reset();}
     /** Two decoder pipes, at most one published video frame; neither pipe accumulates the movie. */
     private static final class Movie implements AutoCloseable {
-        final Path file;final Process video,audio;volatile SourceDataLine line;
+        final long id;final Path file;final Process video,audio;volatile SourceDataLine line;
         volatile BufferedImage frame;volatile Exception error;volatile boolean closed,videoDone,audioDone;
-        Movie(GameResources resources,String name,int width,int height)throws Exception{
+        Movie(GameResources resources,String name,int width,int height,long id)throws Exception{
+            this.id=id;
             Path dir=Paths.get(System.getProperty("dc.cacheRoot","build/desktop/media-cache"));Files.createDirectories(dir);file=Files.createTempFile(dir,"movie-",".mpg");
             try(OutputStream out=Files.newOutputStream(file)){resources.copy(name,out,1024L*1024*1024);}
             Process v=null,a=null;try{v=process("-i",file.toAbsolutePath().toString(),"-an","-vf","scale="+width+":"+height+":force_original_aspect_ratio=decrease,pad="+width+":"+height+":(ow-iw)/2:(oh-ih)/2,fps=30","-pix_fmt","bgr24","-f","rawvideo","pipe:1");a=process("-i",file.toAbsolutePath().toString(),"-vn","-ac","2","-ar","44100","-f","s16le","pipe:1");}catch(Exception e){if(v!=null)v.destroy();if(a!=null)a.destroy();Files.deleteIfExists(file);throw e;}video=v;audio=a;
