@@ -57,7 +57,7 @@ def candidate_profiles(data: bytes, profile_id: str | None = None) -> list[tuple
         width = 1 if length == 1 else 2
         if offset + length > len(data):
             continue
-        if int.from_bytes(data[offset:offset + width], "little") == version:
+        if int.from_bytes(data[offset:offset + width], "little") in {version, *profile.get("alt_versions", [])}:
             matches.append((profile, offset, length))
     return matches
 

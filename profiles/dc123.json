@@ -808,47 +808,10 @@
       ],
       "title": "D.C.II P.C.～ダ・カーポII～",
       "evidence": "reference_format_only",
-      "execution_supported": false
-    },
-    {
-      "id": "dc2pc-9969",
-      "alias": "dc2pc",
-      "layout": "offset1",
-      "version": 39273,
-      "ranges": [
-        [
-          "u8x2",
-          0,
-          40
-        ],
-        [
-          "u8str",
-          41,
-          46
-        ],
-        [
-          "string",
-          47,
-          73
-        ],
-        [
-          "encoded_string",
-          74,
-          77
-        ],
-        [
-          "u16x4",
-          78,
-          255
-        ]
-      ],
-      "string_key": 32,
-      "plain_text_opcodes": [
-        69
-      ],
-      "title": "D.C.II P.C.～ダ・カーポII～",
-      "evidence": "reference_format_only",
-      "execution_supported": false
+      "execution_supported": false,
+      "alt_versions": [
+        39273
+      ]
     },
     {
       "id": "dc3rx-9772",

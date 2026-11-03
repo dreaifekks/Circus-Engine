@@ -371,7 +371,7 @@ ops.put(70, "pc.voice_group.add");
 ops.put(71, "ui.music_end_action");
 ops.put(87, "pc.grid.item");
 ops.put(88, "pc.grid.caption");
-return new Profile("dc2pc-5769",22377,4,2,41,47,74,78,82,53,30,2,true,false,true,false,Variables.Model.PC_WIDE,ops);
+return new Profile("dc2pc-5769",22377,4,2,41,47,74,78,82,53,30,2,true,false,true,false,Variables.Model.PC_WIDE,ops,new int[]{39273});
 }
 if(id.equals("dcpc-2063")) {
 ops.put(0, "stream.stop");
