@@ -17,15 +17,15 @@ public final class DesktopMedia implements AutoCloseable {
     private int movieGeneration=-1;private long movieTicket;
     private boolean movieLoading;private final AtomicLong movieRequest=new AtomicLong();private final AtomicReference<Movie> movieReady=new AtomicReference<>();
     public final Set<String> decodedMovies=new TreeSet<>();
-    // Opening, starting, stopping and closing a Clip block for 30-120 ms, and close can block for 2 s.
-    // A window must not wait for that on its event thread, so it hands them to these daemon threads.
+    // The Mac app reads and decodes on these daemon threads, and plays through DesktopMixer.
     private static final ThreadFactory DAEMON=task->{Thread t=new Thread(task,"dc-audio");t.setDaemon(true);return t;};
     private static final ExecutorService LOADERS=Executors.newFixedThreadPool(3,DAEMON),RELEASERS=Executors.newCachedThreadPool(DAEMON);
     private boolean background;
     private final AtomicLongArray request=new AtomicLongArray(6);
     private final AtomicReferenceArray<Loaded> ready=new AtomicReferenceArray<>(6);
     private final AtomicReference<Exception> failure=new AtomicReference<>();
-    private static final class Loaded {final long id;final Clip clip;Loaded(long id,Clip clip){this.id=id;this.clip=clip;}}
+    private final DesktopMixer.Track[] tracks=new DesktopMixer.Track[6];
+    private static final class Loaded {final long id;final DesktopMixer.Track track;Loaded(long id,DesktopMixer.Track track){this.id=id;this.track=track;}}
     public DesktopMedia(DesktopEngine e){engine=e;}
     /** Audits keep the default: every sound is playing when sync returns. */
     public void playInBackground(){background=true;}
@@ -43,26 +43,35 @@ public final class DesktopMedia implements AutoCloseable {
         final Xpcm read=engine.resources instanceof UnityCircusResources?engine.resources.audio(name):null;
         final long id=request.get(ch);
         LOADERS.execute(()->{
-            Clip clip=null;
             try{
                 if(request.get(ch)!=id)return;
                 Xpcm audio=read!=null?read:engine.resources.audio(name);byte[] pcm=pcm(audio);
                 if(request.get(ch)!=id)return;
-                clip=open(audio,pcm);gain(clip,volume);balance(clip,pan);
-                if(resume>0)clip.setMicrosecondPosition(Math.min(resume,Math.max(0,clip.getMicrosecondLength()-1)));
-                if(request.get(ch)!=id){release(clip);return;}
-                if(loop)clip.loop(Clip.LOOP_CONTINUOUSLY);else clip.start();
-                publish(ch,new Loaded(id,clip));
-            }catch(Exception e){if(clip!=null)release(clip);if(request.get(ch)==id)failure.compareAndSet(null,e);}
+                DesktopMixer.Track track=audio.codec.equals("ogg")?new DesktopMixer.Track(pcm,44100,2,16,loop):new DesktopMixer.Track(pcm,audio.sampleRate,audio.channels,audio.bits,loop);
+                track.volume(volume,pan);track.startAtVolume();if(resume>0)track.seekMicros(resume);
+                DesktopMixer.shared().play(track);publish(ch,new Loaded(id,track));
+            }catch(Exception e){if(request.get(ch)==id)failure.compareAndSet(null,e);}
         });
     }
-    /** Loaders can finish out of order: the newest request stays, and the other clip must not be dropped still open. */
+    /** Loaders can finish out of order: the newest request stays, and the other track must not keep playing. */
     private void publish(int ch,Loaded mine){
         Loaded loser=mine;
         synchronized(ready){Loaded held=ready.get(ch);if(held==null||held.id<mine.id){ready.set(ch,mine);loser=held;}}
-        if(loser!=null)release(loser.clip);
+        if(loser!=null)loser.track.stop();
     }
-    private void release(Clip clip){RELEASERS.execute(()->{clip.stop();clip.close();});}
+    private void syncTrack(int ch)throws Exception{
+        if(heard[ch]!=engine.audioGeneration(ch)){
+            stop(ch);heard[ch]=engine.audioGeneration(ch);
+            if(!engine.audio(ch).isEmpty()&&engine.audioActive(ch))load(ch);
+            return;
+        }
+        Loaded loaded=ready.getAndSet(ch,null);if(loaded!=null){if(loaded.id==request.get(ch))tracks[ch]=loaded.track;else loaded.track.stop();}
+        DesktopMixer.Track track=tracks[ch];if(track==null)return;
+        if(sought[ch]!=engine.audioSeekGeneration(ch)){sought[ch]=engine.audioSeekGeneration(ch);track.seekMicros(track.lengthMicros()*Math.max(0,Math.min(100,engine.audioSeekPercent(ch)))/100);}
+        engine.audioPosition(ch,track.positionMicros(),track.lengthMicros());track.volume(engine.volume(ch),engine.pan(ch));
+        if(!engine.audioActive(ch)){stop(ch);return;}
+        if(!engine.audioLoop(ch)&&track.finished()){engine.audioCompleted(ch,heard[ch]);stop(ch);}
+    }
     public static String ffmpeg()throws IOException{String executable=System.getProperty("dc.ffmpeg",System.getenv("DC_FFMPEG"));if(executable==null||executable.isEmpty())throw new IOException("FFmpeg is required for Ogg/movie playback. Set DC_FFMPEG to its executable.");return executable;}
     private static Process process(String... args)throws IOException{List<String> command=new ArrayList<>();command.add(ffmpeg());Collections.addAll(command,"-nostdin","-hide_banner","-loglevel","error");Collections.addAll(command,args);Process p=new ProcessBuilder(command).start();Thread errors=new Thread(()->{try(InputStream in=p.getErrorStream()){byte[] b=new byte[4096];int n,total=0;while((n=in.read(b))!=-1){if(total<16384)System.err.write(b,0,Math.min(n,16384-total));total+=n;}}catch(IOException ignored){}},"dc-media-diagnostics");errors.setDaemon(true);errors.start();return p;}
     public static byte[] decodeOgg(byte[] ogg)throws Exception{
@@ -71,16 +80,15 @@ public final class DesktopMedia implements AutoCloseable {
         try{byte[] pcm=Binary.read(p.getInputStream(),128*1024*1024);int exit=p.waitFor();input.join();if(exit!=0||error[0]!=null)throw new IOException("Ogg decoder failed ("+exit+")",error[0]);return pcm;}finally{p.destroy();}
     }
     public void sync()throws Exception{
-        Exception failed=failure.getAndSet(null);if(failed!=null)throw new IOException("Audio playback failed",failed);
+        Exception failed=failure.getAndSet(null);if(failed==null&&background)failed=DesktopMixer.shared().failure();if(failed!=null)throw new IOException("Audio playback failed",failed);
         for(int ch=0;ch<6;ch++){
+            if(background){syncTrack(ch);continue;}
             if(heard[ch]!=engine.audioGeneration(ch)){
                 stop(ch);heard[ch]=engine.audioGeneration(ch);if(engine.audio(ch).isEmpty()||!engine.audioActive(ch))continue;
-                if(background){load(ch);continue;}
                 Xpcm audio=engine.resources.audio(engine.audio(ch));engine.loadedAudio.add(engine.audio(ch));byte[] pcm=pcm(audio);
                 if(engine.audit){engine.audioCompleted(ch,heard[ch]);continue;}
                 Clip clip=open(audio,pcm);clips[ch]=clip;long resume=engine.takeAudioResume(ch);if(resume>0)clip.setMicrosecondPosition(Math.min(resume,Math.max(0,clip.getMicrosecondLength()-1)));sought[ch]=engine.audioSeekGeneration(ch);if(engine.audioLoop(ch))clip.loop(Clip.LOOP_CONTINUOUSLY);else clip.start();
             }
-            Loaded loaded=ready.getAndSet(ch,null);if(loaded!=null){if(loaded.id==request.get(ch))clips[ch]=loaded.clip;else release(loaded.clip);}
             Clip clip=clips[ch];if(clip!=null){if(sought[ch]!=engine.audioSeekGeneration(ch)){sought[ch]=engine.audioSeekGeneration(ch);clip.setMicrosecondPosition(clip.getMicrosecondLength()*Math.max(0,Math.min(100,engine.audioSeekPercent(ch)))/100);}engine.audioPosition(ch,clip.getMicrosecondPosition(),clip.getMicrosecondLength());gain(clip,engine.volume(ch));balance(clip,engine.pan(ch));if(!engine.audioActive(ch)){stop(ch);continue;}if(!engine.audioLoop(ch)&&!clip.isRunning()&&clip.getFramePosition()>=clip.getFrameLength()){engine.audioCompleted(ch,heard[ch]);stop(ch);}}
         }
         if(!engine.movie().isEmpty()&&movieGeneration!=engine.movieGeneration()){
@@ -95,7 +103,7 @@ public final class DesktopMedia implements AutoCloseable {
     private static void balance(Line line,int pan){FloatControl.Type type=line.isControlSupported(FloatControl.Type.BALANCE)?FloatControl.Type.BALANCE:FloatControl.Type.PAN;if(line.isControlSupported(type)){FloatControl c=(FloatControl)line.getControl(type);float value=pan==0?0:Math.copySign((float)(1-Math.pow(10,-Math.abs(pan)/2000.0)),pan);c.setValue(Math.max(c.getMinimum(),Math.min(c.getMaximum(),value)));}}
     private static void gain(Line line,float value){if(line.isControlSupported(FloatControl.Type.MASTER_GAIN)){FloatControl gain=(FloatControl)line.getControl(FloatControl.Type.MASTER_GAIN);float db=value<=0?gain.getMinimum():(float)(20*Math.log10(value));gain.setValue(Math.max(gain.getMinimum(),Math.min(gain.getMaximum(),db)));}}
     public BufferedImage movieFrame(){return movie==null?null:movie.frame;}
-    public long audioFrames(int ch){return clips[ch]==null?0:clips[ch].getLongFramePosition();}
+    public long audioFrames(int ch){return background?(tracks[ch]==null?0:tracks[ch].framePosition()):clips[ch]==null?0:clips[ch].getLongFramePosition();}
     public long movieAudioFrames(){return movie==null||movie.line==null?0:movie.line.getLongFramePosition();}
     public boolean playingMovie(){return movie!=null||movieLoading;}
     public void finishMovie()throws IOException{dropMovie();engine.mediaCompleted(movieTicket);}
@@ -110,10 +118,9 @@ public final class DesktopMedia implements AutoCloseable {
     private void closeMovie(Movie m){if(background)RELEASERS.execute(m::close);else m.close();}
     private void dropMovie(){movieRequest.incrementAndGet();movieLoading=false;if(movie!=null){closeMovie(movie);movie=null;}}
     private void stop(int n){
-        request.incrementAndGet(n);Loaded loaded=ready.getAndSet(n,null);if(loaded!=null)release(loaded.clip);
-        Clip clip=clips[n];clips[n]=null;if(clip==null)return;
-        // The mute is immediate, so a slow stop never overlaps the sound that replaces this one.
-        if(background){gain(clip,0);release(clip);}else{clip.stop();clip.close();}
+        request.incrementAndGet(n);Loaded loaded=ready.getAndSet(n,null);if(loaded!=null)loaded.track.stop();
+        if(tracks[n]!=null){tracks[n].stop();tracks[n]=null;}
+        if(clips[n]!=null){clips[n].stop();clips[n].close();clips[n]=null;}
     }
     public void reset(){for(int n=0;n<6;n++)stop(n);Arrays.fill(heard,-1);movieGeneration=-1;dropMovie();}
     public void close(){reset();}

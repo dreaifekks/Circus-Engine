@@ -65,7 +65,7 @@ public final class DesktopRuntime implements AutoCloseable {
         Files.write(out.resolve("result.json"),(Json.text(result)+"\n").getBytes(StandardCharsets.UTF_8));System.out.println(Json.text(result));if(!pass)throw new IOException("Startup/choice/save contract incomplete");
     }
     private void window(){
-        media.playInBackground();
+        if(DesktopMac.ACTIVE)media.playInBackground();
         JFrame frame=new JFrame("DC Runtime — "+engine.resources.profileId);
         try{java.net.URL icon=DesktopRuntime.class.getResource("/launcher_logo.png");if(icon!=null)frame.setIconImage(ImageIO.read(icon));}catch(IOException ignored){}
         final DesktopMac.Scaler scaler=new DesktopMac.Scaler();JPanel panel=new JPanel(){protected void paintComponent(Graphics g){super.paintComponent(g);try{double s=Math.min(getWidth()/(double)engine.width,getHeight()/(double)engine.height);int w=(int)(engine.width*s),h=(int)(engine.height*s);BufferedImage movie=media.movieFrame();BufferedImage image=movie!=null?movie:engine.render();if(DesktopMac.ACTIVE)scaler.draw((Graphics2D)g,this,image,(getWidth()-w)/2,(getHeight()-h)/2,w,h);else g.drawImage(image,(getWidth()-w)/2,(getHeight()-h)/2,w,h,null);}catch(Exception e){problem=e.toString();}if(!problem.isEmpty()){g.setColor(new Color(0,0,0,220));g.fillRect(0,0,getWidth(),70);g.setColor(Color.RED);g.drawString(problem,10,30);}}};panel.setPreferredSize(new Dimension(engine.width,engine.height));panel.setBackground(Color.BLACK);

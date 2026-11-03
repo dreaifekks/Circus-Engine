@@ -193,7 +193,9 @@ public final class DesktopLegacy extends DesktopEngine {
         g.setComposite(old);
     }
     private void scene(Graphics2D g,Dc2Scene.Frame f)throws IOException {
-        g.setColor(Color.BLACK);g.fillRect(0,0,width,height);at(g,f.slots[1],-f.x,-f.y);
+        g.setColor(Color.BLACK);g.fillRect(0,0,width,height);
+        // Scroll arguments are already drawing offsets: an 800x1200 background scrolls to y=-600 to show its lower half.
+        at(g,f.slots[1],DesktopMac.ACTIVE?f.x:-f.x,DesktopMac.ACTIVE?f.y:-f.y);
         boolean pc2=resources.profileId.equals("dc2pc-5769");
         // PC2 41A950 visits actor slots 0..3, so a later close-up covers earlier actors.
         for(int order=0;order<4;order++){int n=pc2?order:3-order;int[] a=f.actors[n];for(int slot:new int[]{n+2,n+6}){String name=slot==n+6?resources.characterOverlay(f.slots[n+2],f.slots[slot]):f.slots[slot];Picture p=picture(name);if(p==null)continue;
