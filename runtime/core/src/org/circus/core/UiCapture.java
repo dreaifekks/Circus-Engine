@@ -9,7 +9,7 @@ import java.util.zip.*;
 public final class UiCapture {
     public static final int LEGACY=1,DD=2,ARGB=3;
     private static final int MAX_BYTES=8*1024*1024,MAX_DEPTH=256;
-    public interface Renderer {UiCapture flatten(UiCapture capture)throws IOException;}
+    public interface Renderer {UiCapture flatten(UiCapture capture)throws IOException;default UiCapture screen()throws IOException{return null;}}
     public final int kind,depth;
     public final UiCapture previous;
     private final byte[] payload;

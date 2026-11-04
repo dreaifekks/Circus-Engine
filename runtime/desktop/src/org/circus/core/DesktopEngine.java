@@ -70,6 +70,10 @@ public abstract class DesktopEngine {
     public void pointerUp(int x,int y)throws Exception{if(!pointerHeld)return;boolean anywhere=keepsPointerAcrossRebuild();if(!anywhere&&pointerStale(x,y)){cancelPointer();return;}boolean activate=anywhere||sameControl(controlAt(x,y)),dragging=pointerDragging;pointerHeld=pointerDragging=false;pressed(x,y,false);if(dragging)endDrag();else if(activate)click(x,y,false);pointerControl=null;}
     public void cancelPointer(){pointerHeld=pointerDragging=false;pointerControl=null;pressed(0,0,false);cancelDrag();}
     public void scroll(int units)throws Exception{}
+    /** Arrow and page keys, on key down so that they repeat. */
+    public void navKey(int code)throws Exception{}
+    /** The script a save was made in, for engines that can tell. */
+    protected String saveScript(byte[] state){return "";}
     public abstract void hover(int x,int y)throws Exception;
     /** Space and Enter; the default presses the middle of the screen. */
     public void keyPress(boolean space)throws Exception{click(width/2,height/2,false);}
@@ -115,10 +119,10 @@ public abstract class DesktopEngine {
     public void save(Path path)throws IOException{
         DesktopSave s=new DesktopSave();s.state=snapshot();s.textElapsed=playbackMillis();s.created=System.currentTimeMillis();s.icon=saveIcon();String caption=saveCaption();s.caption=caption.length()>200?caption.substring(0,200):caption;
         BufferedImage image=preview();try{s.preview=DesktopSave.thumbnail(image,256,256*height/width);}finally{image.flush();}for(int ch=0;ch<6;ch++){s.audio[ch]=systemAudio==null?audio(ch):systemAudio[ch];s.position[ch]=s.audio[ch].equals(mediaResource[ch])?mediaPosition[ch]:systemAudioPosition==null?0:systemAudioPosition[ch];}
-        atomic(path,s.encode());s.state=null;saveMetadata.put(path,s);
+        atomic(path,s.encode());s.script=saveScript(s.state);s.state=null;saveMetadata.put(path,s);
     }
     public void restore(Path path)throws IOException{DesktopSave s=DesktopSave.decode(Files.readAllBytes(path));restore(s.state);systemAudio=null;systemAudioPosition=null;playbackMillis(s.textElapsed);for(int ch=0;ch<6;ch++)resumePosition[ch]=s.audio[ch].equals(audio(ch))?s.position[ch]:0;}
-    public DesktopSave metadata(Path path)throws IOException{DesktopSave s=saveMetadata.get(path);if(s==null&&Files.exists(path)){s=DesktopSave.decode(Files.readAllBytes(path));s.state=null;saveMetadata.put(path,s);}return s;}
+    public DesktopSave metadata(Path path)throws IOException{DesktopSave s=saveMetadata.get(path);if(s==null&&Files.exists(path)){s=DesktopSave.decode(Files.readAllBytes(path));s.script=saveScript(s.state);s.state=null;saveMetadata.put(path,s);}return s;}
     public void scanThumbnail(int slot,Path path)throws IOException{DesktopSave s=metadata(path);if(s!=null){BufferedImage image=s.image();if(image!=null)thumbnails.put(slot,image);}}
     public static void atomic(Path path,byte[] bytes)throws IOException{
         Files.createDirectories(path.toAbsolutePath().getParent());Path temp=Files.createTempFile(path.toAbsolutePath().getParent(),"dc-save-",".tmp");

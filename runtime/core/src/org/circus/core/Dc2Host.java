@@ -122,6 +122,8 @@ public class Dc2Host implements MesVm.ContextHost,MesVm.MenuHost,MesVm.ChoiceHos
     }
     public void write(int bank,int index,int value)throws IOException{if(bank==94||bank==95){require(index>=0&&index<128,"voice character");voicePreferences[index*2+(bank==94?1:0)]=(byte)value;return;}if(bank==99&&index==218){require(value>=0&&value<20,"confirmation selector");registers.put(218,value);return;}if(bank==99&&index==217){confirmations[read(99,218)]=value;return;}if(bank==99&&index==255){state.indirectResult(value==255?-1:value);return;}if(bank==99&&registers.containsKey(index)){registers.put(index,value);return;}state.write(bank,index,value);}
     private int scriptId()throws IOException{if(script==null)return -1;List<NamesCatalog.Entry> list=resources.names.table("scenario_scripts");for(int n=0;n<list.size();n++)if(list.get(n).name.equalsIgnoreCase(script.name))return n;return -1;}
+    /** The Mac app's PC log only reads back text and voice, so no rewind snapshots or previews are kept. */
+    public boolean keepsOnlyLogText(){return false;}
     public boolean allowNamedJump(){return true;}
     public boolean beforeTransfer(int mode,String name)throws IOException{
         require(mode>=1&&mode<=3,"transfer mode "+mode);

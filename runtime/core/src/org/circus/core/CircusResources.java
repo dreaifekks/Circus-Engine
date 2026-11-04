@@ -63,7 +63,10 @@ public class CircusResources {
         int end=parts[0].toLowerCase(Locale.ROOT).endsWith(".crx")?parts[0].length()-4:parts[0].length();char filter=end==0?0:parts[0].charAt(end-1);
         if(filter=='@'||filter=='*'){if(!Dc3Host.supports(profile)&&!profile.id.equals("dc2dm-9d72")&&!PcHost.supports(profile))throw new IOException("Unverified image filter for "+profile.id);parts[0]=parts[0].substring(0,end-1)+parts[0].substring(end);}else filter=0;
         String patch=loosePatch(extension(Binary.nativeResourcePath(parts[0]),".CRX"));if(patch!=null)return tint(files.image(patch),filter);
-        if(parts.length==1){String file="AdvData/GRP/"+extension(Binary.nativeResourcePath(parts[0]),".CRX");return tint(PcHost.supports(profile)?Crx.plain(files.read(file,128*1024*1024),true):files.image(file),filter,profile.id.equals("dc2pc-5769")?2:profile.id.equals("dcpc-2063")?1:0);}
+        if(parts.length==1){String file="AdvData/GRP/"+extension(Binary.nativeResourcePath(parts[0]),".CRX");
+            // 423960: a repacked install keeps "bst\\name" in the archive named by the first ten characters of the name.
+            if(PcHost.followsExe&&PcHost.supports(profile)&&reference.length()>10&&reference.regionMatches(true,0,"bst\\",0,4)&&!files.paths().contains(file.toLowerCase(Locale.ROOT)))return image(reference+","+reference.substring(0,10));
+            return tint(PcHost.supports(profile)?Crx.plain(files.read(file,128*1024*1024),true):files.image(file),filter,profile.id.equals("dc2pc-5769")?2:profile.id.equals("dcpc-2063")?1:0);}
         String archive="AdvData/GRP/"+extension(Binary.nativeResourcePath(parts[1]),".CRM");
         String entry=extension(basename(Binary.nativeResourcePath(parts[0])),".CRX");
         return tint(files.imageAtOffset(archive,archiveEntry(archive,entry).offset),filter,profile.id.equals("dc2pc-5769")?2:profile.id.equals("dcpc-2063")?1:0);

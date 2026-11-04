@@ -12,6 +12,8 @@ public final class DesktopSave {
     private static final int MAGIC=0x44435332, LIMIT=64*1024*1024;
     public byte[] state,preview=new byte[0];
     public String caption="";
+    /** Read from the state when the save is opened; not stored separately. */
+    public transient String script="";
     public long created,textElapsed; public int icon=-1;
     public final String[] audio={"","","","","",""};
     public final long[] position=new long[6];

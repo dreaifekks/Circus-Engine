@@ -48,6 +48,14 @@ public final class MesVm {
         this.library=lib;this.host=host;script=lib.script(entry);this.variables=new Variables(host,script.profile.variableModel);pc=script.firstOffset;
         if(host instanceof ContextHost)((ContextHost)host).attach(variables);
     }
+    /** The script a snapshot stands in, read without restoring it. */
+    public static String scriptOf(byte[] snapshot)throws IOException{
+        DataInputStream in=new DataInputStream(new ByteArrayInputStream(snapshot));in.readInt();in.readUTF();return in.readUTF();
+    }
+    /** Host-owned jump to a label of the current script. */
+    public void jump(String label)throws IOException{
+        Integer target=script.label(label.getBytes(Binary.SJIS));if(target==null)throw new IOException("Label missing: "+label);pc=target;status=Status.RUNNING;
+    }
     public Status status(){return status;} public String error(){return error;}
     public String scriptName(){return script.name;} public int offset(){return pc;}
     public String profileId(){return script.profile.id;}

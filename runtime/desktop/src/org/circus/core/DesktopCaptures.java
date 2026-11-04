@@ -13,7 +13,13 @@ final class DesktopCaptures implements UiCapture.Renderer {
     private boolean drawing;
     private BufferedImage previous;
     private final Map<UiCapture,BufferedImage> cache=new LinkedHashMap<UiCapture,BufferedImage>(4,.75f,true){protected boolean removeEldestEntry(Map.Entry<UiCapture,BufferedImage> e){return size()>4;}};
+    /** What the window shows now, for scripts that take the screen as it is. */
+    java.util.function.Supplier<BufferedImage> screen=()->null;
     DesktopCaptures(int width,int height,Drawer drawer){this.width=width;this.height=height;this.drawer=drawer;}
+    @Override public UiCapture screen()throws IOException{
+        BufferedImage image=screen.get();if(image==null)return null;
+        UiCapture flat=UiCapture.pixels(width,height,image.getRGB(0,0,width,height,null,0,width));cache.put(flat,image);return flat;
+    }
     BufferedImage resolve(UiCapture capture)throws IOException {
         if(drawing){if(previous==null)throw new IOException("Missing preceding UI texture");return previous;}
         if(capture==null)throw new IOException("Missing UI texture");
