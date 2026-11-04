@@ -41,12 +41,16 @@ public final class DesktopRuntime implements AutoCloseable {
                     java.util.List<String> actions=new ArrayList<>();for(DesktopEngine.Control b:engine.controls())actions.add(b.action);
                     if(!lastMenu.equals(location)){System.out.println(Json.text(Json.obj("menu",location,"actions",actions)));lastMenu=location;}
                     String script=engine.scriptName();String selected=null;
-                    if(!title){for(String a:new String[]{"window","03","sce_start","start"})if(actions.contains(a)){selected=a;break;}
-                        if(selected!=null&&(selected.equals("start")||selected.equals("sce_start"))){ImageIO.write(engine.render(),"png",out.resolve("01-title.png").toFile());title=true;}
+                    if(!title){for(String a:new String[]{"window","03","sce_start","start","story","sce"})if(actions.contains(a)){selected=a;break;}
+                        if(selected!=null&&(selected.equals("start")||selected.equals("sce_start")||selected.equals("story")||selected.equals("sce"))){ImageIO.write(engine.render(),"png",out.resolve("01-title.png").toFile());title=true;}
                     }else if(lines==0&&actions.contains("sel01"))selected="sel01";
+                    else if(lines==0&&actions.contains("sce01"))selected="sce01";
                     else if(lines==0&&actions.contains("sceselect01"))selected="sceselect01";
                     else if(lines==0&&actions.contains("menu01"))selected="menu01"; // D.C.III W.Y.: the branch select opens with menu01 before sel01.
                     else if(lines>0&&!choice){ImageIO.write(engine.render(),"png",out.resolve("04-choice.png").toFile());selected=actions.isEmpty()?null:actions.get(0);choice=true;choiceAt=lines;}
+                    // The other games on the DC2PC engine name their menus freely; the first one that goes forward will do.
+                    if(selected==null&&PcHost.pc2Family(engine.resources.profileId)&&(!title||lines==0))for(String a:actions)if(!a.startsWith("return")&&!a.startsWith("end")&&!a.startsWith(":")&&!java.util.Arrays.asList("exit","load","config","option","name","menu0","rmain","kaisou","extra","minigame","ex_anime").contains(a)){selected=a;break;}
+                    if(selected!=null&&!title&&!actions.contains("window")&&!actions.contains("03"))title=true;
                     if(selected==null)throw new IOException("Audit needs original menu action at "+location+": "+actions);
                     engine.choose(selected);continue;
                 }

@@ -22,7 +22,7 @@ def generate():
         stride=6 if f['layout']=='offset2' else 4
         marker=s['decoder'].get('version_bytes',3 if stride==6 else 2)
         fields=[json.dumps(pid),str(f['version']),str(stride),str(marker),str(starts.get('u8str',starts['string'])),str(starts['string']),str(starts['encoded_string']),str(starts['u16x4']),str(s['decoder']['extension_opcode']),str(c['label_opcode']),str(c['block_marker_opcode']),str(c['companion_opcode']),str(c['block_scan_signed_opcode']).lower(),str(mapping == {'36':32}).lower(),str(s['decoder'].get('text_verified',mapping is not None)).lower(),'false','Variables.Model.'+model,'ops']
-        alt = f.get('alt_versions')
+        alt = list(f.get('alt_versions') or []) + list(f.get('mixed_versions') or [])
         if alt: fields.append('new int[]{'+','.join(str(x) for x in alt)+'}')
         lines += ['return new Profile('+','.join(fields)+');','}']
     lines += ['if(id.equals("circus-demo-v1")) {',
@@ -35,12 +35,17 @@ def generate():
     target.write_text('\n'.join(lines)+'\n',encoding='utf-8')
     formats=['package org.circus.core;', '// Generated from profiles/dc123.json; framing does not imply execution support.',
              'final class MesFormats {', 'static final class Format { final String id; final int version,stride;',
-             'Format(String id,int version,int stride){this.id=id;this.version=version;this.stride=stride;} }',
+             'final boolean mixed;',
+             'Format(String id,int version,int stride){this(id,version,stride,false);}',
+             'Format(String id,int version,int stride,boolean mixed){this.id=id;this.version=version;this.stride=stride;this.mixed=mixed;} }',
              'static final Format[] ALL={']
     for pid,f in framing.items():
         stride='6' if f['layout']=='offset2' else '4'
         for v in [f['version']]+list(f.get('alt_versions') or []):
             formats.append('new Format('+json.dumps(pid)+','+str(v)+','+stride+'),')
+        # A few files in these games carry another build's stamp; the stamp alone never selects the game.
+        for v in f.get('mixed_versions') or []:
+            formats.append('new Format('+json.dumps(pid)+','+str(v)+','+stride+',true),')
     formats+=['};','private MesFormats(){}','}']
     (target.parent/'MesFormats.java').write_text('\n'.join(formats)+'\n',encoding='utf-8')
 

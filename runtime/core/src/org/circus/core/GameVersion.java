@@ -9,7 +9,7 @@ public final class GameVersion {
     private GameVersion(String id,int count){profileId=id;scriptCount=count;}
     public Profile profile()throws IOException{try{return Profiles.get(profileId);}catch(IllegalArgumentException e){throw new IOException("尚未实现此脚本版本的指令语义："+profileId,e);}}
     public static GameVersion detect(GameResources files)throws IOException{
-        Set<String> common=null;int count=0;
+        Set<String> common=null,pinned=new HashSet<>();int count=0;
         for(String path:new TreeSet<>(files.paths())){
             if(!path.startsWith("advdata/mes/")||!path.endsWith(".mes"))continue;
             Set<String> candidates=new HashSet<>();
@@ -24,7 +24,7 @@ public final class GameVersion {
                     long offset=4+labels*f.stride;int length=f.stride==6||Binary.u32(head,4)==3?3:f.version<256?1:2;
                     if(offset+length>=size)continue;
                     byte[] marker=markers.get(f.stride);if(marker==null){marker=read(reader,offset,(int)Math.min(3,size-offset));markers.put(f.stride,marker);}
-                    if((length==1?Binary.u8(marker,0):Binary.u16(marker,0))==f.version)candidates.add(f.id);
+                    if((length==1?Binary.u8(marker,0):Binary.u16(marker,0))==f.version){candidates.add(f.id);if(!f.mixed)pinned.add(f.id);}
                 }
             }
             if(candidates.isEmpty())throw new IOException("无法识别 MES 版本："+path);
@@ -33,6 +33,7 @@ public final class GameVersion {
             count++;
         }
         if(count==0)throw new IOException("目录中没有 AdvData/MES/*.mes");
+        common.retainAll(pinned);if(common.isEmpty())throw new IOException("无法识别 MES 版本");
         if(common.size()!=1)throw new IOException("MES 版本无法唯一确定："+new TreeSet<>(common));
         if(!files.paths().contains("advdata/mes/start.mes"))throw new IOException("缺少原版启动脚本 START.mes");
         return new GameVersion(common.iterator().next(),count);

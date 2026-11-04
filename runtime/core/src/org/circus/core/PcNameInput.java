@@ -49,8 +49,11 @@ public final class PcNameInput {
     }
     /** The Vista build carries the same tables 0x3080 bytes later; code bytes are no help, so look for the first row. */
     private static int tableShift(Dc2NativeData.Pe pe){
-        try{byte[] row=pe.stringBytes(0x433d38),kana="あいうえお".getBytes(Binary.SJIS);if(row.length<kana.length)return 0;for(int n=0;n<kana.length;n++)if(row[n]!=kana[n])return 0;return 0x3080;}
-        catch(IOException e){return 0;}
+        try{
+            byte[] kana="あいうえお".getBytes(Binary.SJIS),b=pe.bytes;int origin=pe.at(0x430cb8);
+            for(int p=0;p+kana.length<b.length;p++){boolean same=true;for(int n=0;n<kana.length&&same;n++)same=b[p+n]==kana[n];if(same)return p-origin;}
+        }catch(IOException e){}
+        return 0;
     }
     private static int word(Dc2NativeData.Pe pe,int address)throws IOException{return (int)Binary.u32(pe.bytes,pe.at(address));}
     private static List<String> rows(Dc2NativeData.Pe pe,TextCodec codec,int address,int stride,int limit)throws IOException {
@@ -79,7 +82,7 @@ public final class PcNameInput {
         if(action.startsWith("@name:field:")){int n=Integer.parseInt(action.substring(12));field=n/4;cursor=n%4;return 0;}
         if(action.startsWith("@name:char:")){
             int n=Integer.parseInt(action.substring(11)),row=n/17,col=n%17;List<String> r=visibleRows();if(row>=r.size()||col>=r.get(row).length())return 0;char c=r.get(row).charAt(col);if(c=='\u3000'||c==' ')return 0;
-            if(category==3&&group==0){group=groups[row*17+col];page=0;return 0;}
+            if(category==3&&group==0&&row*17+col<groups.length){group=groups[row*17+col];page=0;return 0;}if(category==3&&group==0)return 0;
             insert(String.valueOf(c));return 0;
         }
         if(!action.startsWith("@name:button:"))throw new IOException("Unknown name editor action");

@@ -2,7 +2,9 @@ package org.circus.core;
 // Generated from profiles/dc123.json; framing does not imply execution support.
 final class MesFormats {
 static final class Format { final String id; final int version,stride;
-Format(String id,int version,int stride){this.id=id;this.version=version;this.stride=stride;} }
+final boolean mixed;
+Format(String id,int version,int stride){this(id,version,stride,false);}
+Format(String id,int version,int stride,boolean mixed){this.id=id;this.version=version;this.stride=stride;this.mixed=mixed;} }
 static final Format[] ALL={
 new Format("dcxx-005d",93,4),
 new Format("dcmems-0062",98,4),
@@ -14,7 +16,10 @@ new Format("dcdx-7769",30569,4),
 new Format("dcas-4e69",20073,4),
 new Format("dcbs-3166",12646,4),
 new Format("dc2fl-9c69",40041,4),
+new Format("dc2fl-9c69",27753,4,true),
 new Format("dc2bs-316c",12652,4),
+new Format("dc2bs-316c",39273,4,true),
+new Format("dc2bs-316c",12646,4,true),
 new Format("dc2dm-9d72",40306,6),
 new Format("dc2fy-3866",14438,4),
 new Format("dc2cckko-026c",620,4),

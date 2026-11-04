@@ -83,3 +83,21 @@ DirectDraw 和 DC2PC 同代，不是 D.D. 的架构。版面用 `PcText.DM`。
 ## 所有游戏
 
 安装里缺的声音文件按静音处理，不再停游戏。
+
+## 同引擎的其他游戏
+
+这些游戏的分发表和已支持的游戏逐项比较过，走同一套宿主。这说明操作码是什么，不说明每个效果都和它们自己的 EXE 一致，没有像前面几部那样逐区对照。
+
+| 跟随 | 游戏 |
+|---|---|
+| DC2PC（`tools/bind_pc2_family.py`） | D.C.II To You、Spring Celebration、Fall in Love、春風のアルティメットバトル!、Character Collection 两部、D.C.Dream X'mas、Summer Vacation、White Season、D.C.A.S.、ことり Love Ex P |
+| P.P. | D.C.III R |
+| Vista | D.C. 温泉編 |
+
+**已知缺失：**
+- **小游戏：** DCSV 的弹球是原生代码，进入后直接退回菜单。DCSV 的 `dcshoot2`、`CircusPt`，DCWS 的 `dcshoot` 是独立 Windows 程序，点了没有反应。DC2SC 的战斗小游戏用到的 `0x34`、`0x67`、`0x68` 只记录不执行。
+- **Music 顶部曲名和存档行标题：** 只有 DC2PC 接了 EXE 里的表，其他游戏这两处为空。
+- **未知原生命令：** 记录到 `unmodelled` 后跳过，不再停游戏。
+- **D.C.P.K.（`DCPKDVD`）：** 没有 MES 脚本，是另一套引擎，不支持。
+
+DC2BS 里标记 `0x9969` 的脚本是 DC2PC 留下的旧文件，编号和本作不同，随机流程没有走到它们。

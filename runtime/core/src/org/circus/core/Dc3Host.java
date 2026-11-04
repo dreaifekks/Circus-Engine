@@ -60,14 +60,15 @@ public final class Dc3Host implements MesVm.ContextHost,MesVm.ChoiceHost,MesVm.T
     public Dc3Host(CircusResources resources,TextCodec codec){this(resources,codec,false);}
     /** The D.C.III builds that share this host. Only the opcode numbering moves between
      *  them, and the profile carries it, so nothing else here is build-specific. */
-    public static boolean supports(String id){return id.equals("dc3dd-a5a8")||id.equals("dc3wy-a09f")||id.equals("dc3pp-9872");}
+    public static boolean ppFamily(String id){return id.equals("dc3pp-9872")||id.equals("dc3rx-9772");}
+    public static boolean supports(String id){return id.equals("dc3dd-a5a8")||id.equals("dc3wy-a09f")||ppFamily(id);}
     public static boolean supports(Profile p){return p!=null&&supports(p.id);}
     /** wait.message - the opcode that closes a line of dialogue. */
-    public static int waitMessageOpcode(String id){return id.equals("dc3pp-9872")?0x07:0x06;}
+    public static int waitMessageOpcode(String id){return ppFamily(id)?0x07:0x06;}
     public Dc3Layout layout(){return scene.layout;}
     public Dc3Host(CircusResources resources,TextCodec codec,boolean originalSystem){if(resources!=null&&!supports(resources.profile.id))throw new IllegalArgumentException("DD host cannot execute "+resources.profile.id);this.resources=resources;gallery=new Dc3Gallery(resources);this.originalSystem=originalSystem;state=new Dc3State(originalSystem);dialogue=new DialogueHost(codec);dialogue.familyName="朝倉";dialogue.givenName="清隆";if(resources!=null)scene.layout=Dc3Layout.of(resources.profile.id);dialogue.spreadRubyDots=PcHost.followsExe&&!followsPp();if(followsPp())defaultsPp();ui.keepsPanels=PcHost.followsExe&&!followsPp();if(followsWy())musicRoom.useTracks(Dc3Music.WY_TRACKS);if(PcHost.followsExe)history.limit=400;} // 403EE4
     /** The Mac app follows the exes. P.P. is a different engine from D.D. and W.Y.: DirectDraw and DC2PC's habits. */
-    public boolean followsPp(){return PcHost.followsExe&&resources!=null&&resources.profile.id.equals("dc3pp-9872");}
+    public boolean followsPp(){return PcHost.followsExe&&resources!=null&&ppFamily(resources.profile.id);}
     private boolean followsWy(){return PcHost.followsExe&&resources!=null&&resources.profile.id.equals("dc3wy-a09f");}
     /** P.P. 478110 */
     private void defaultsPp(){int[][] values={{5,1},{6,1},{7,20},{8,23},{9,27},{10,1},{11,11},{12,2},{13,0},{14,1},{15,1},{16,7},{17,0},{18,1},{26,8},{27,8},{28,0},{29,17},{30,1}};for(int[] v:values)try{state.write(99,v[0],v[1]);}catch(IOException e){throw new IllegalStateException(e);}}
@@ -301,7 +302,7 @@ public final class Dc3Host implements MesVm.ContextHost,MesVm.ChoiceHost,MesVm.T
             if(originalSystem&&followsWy()&&systemWy(a))return true;
             // PP 412DD5: submode 0 selects native draw mode 4 and returns;
             // no VM/persistent state changes. Canvas owns its draw pipeline.
-            if(originalSystem&&a[0]==12&&a[1]==0&&resources!=null&&resources.profile.id.equals("dc3pp-9872"))return true;
+            if(originalSystem&&a[0]==12&&a[1]==0&&resources!=null&&ppFamily(resources.profile.id))return true;
             if(originalSystem&&a[0]>=200&&a[0]<=202){int track=musicRoom.command(a[0],a[1],variables,state);if(track>=0){pendingAudio[0]=resources.named("music",track);musicId=track;audioLoop[0]=false;musicGain=1;musicFadeRemaining=0;}return true;}
             if(originalSystem&&a[0]==100){return true;} // Caller caption remains part of the suspended story snapshot.
             if(originalSystem&&a[0]==18){

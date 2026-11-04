@@ -147,10 +147,11 @@ public final class PcHost extends Dc2Host {
     @Override public byte[] menuActionForGrid(int index)throws IOException{
         if(list.active()){ScriptList.Item item=list.at(read(99,246),index,grid.size());if(item==null||item.action.isEmpty())return null;registers.put(253,index);registers.put(254,item.id);gridWaiting=ui.waiting=false;musicEndAction="";if(gridClickSound!=255)play(1,resources.named("sound",gridClickSound),false);return item.action.getBytes(Binary.SJIS);}
         if(!gridWaiting||index<0||index>=grid.size())throw new IOException("PC grid selection outside page");int slot=gridSlot(index);
+        if(second&&!exactlyDc2pc()&&script!=null&&script.label("selsave".getBytes(Binary.SJIS))==null&&script.label("selsave2".getBytes(Binary.SJIS))==null)return null;
         if(saveGrid&&slot<2||!saveGrid&&!availableSaves.contains(slot))return null;
         registers.put(253,index);registers.put(254,slot);registers.put(246,0);gridWaiting=ui.waiting=false;
         if(gridClickSound!=255)play(1,resources.named("sound",gridClickSound),false);
-        return (saveGrid||!second?"selsave":"selsave2").getBytes(Binary.SJIS);
+        return (saveGrid||!second||!exactlyDc2pc()&&script!=null&&script.label("selsave2".getBytes(Binary.SJIS))==null?"selsave":"selsave2").getBytes(Binary.SJIS);
     }
     @Override public byte[] pollMenuAction(){if(ui.waiting&&!audioActive[0]&&!musicEndAction.isEmpty()){byte[] a=musicEndAction.getBytes(Binary.SJIS);musicEndAction="";ui.waiting=gridWaiting=false;ui.actions[0]=ui.actions[1]="";return a;}return null;}
     public boolean hasTimedInput(){return timedInput&&remaining!=0;}
@@ -158,8 +159,12 @@ public final class PcHost extends Dc2Host {
     public void openHistory()throws IOException{openHistory(false);}
     public void openHistory(boolean fromChoice)throws IOException{logFromChoice=fromChoice;history.active=true;history.selected=Math.max(0,newestLogLine());ui.waiting=true;ui.buttons.clear();ui.buttons.addAll(Dc2Ui.copyButtons(ui.buttonTemplates.get(messageMode==0?1:4)));showHistory();nextTicket();}
     private void showHistory(){if(history.entries.isEmpty())return;Dc2History.Entry e=history.entries.get(history.selected);speaker=e.speaker;body=e.body;}
-    public static boolean supports(Profile p){return p.id.equals("dc2pc-5769")||p.id.equals("dcpc-2063")||p.id.equals("dc2-3363");}
-    public PcHost(CircusResources r,TextCodec c){super(r,c);second=r.profile.id.equals("dc2pc-5769");pc1=r.profile.id.equals("dcpc-2063");original=r.profile.id.equals("dc2-3363");if(original)ui.quadLimit=60;System.arraycopy(PC_PALETTE,0,ui.palette,0,PC_PALETTE.length);boolean cn=c.charset.name().equalsIgnoreCase("GBK");familyName=second?(cn?"樱内":"桜内"):(cn?"朝仓":"朝倉");givenName=second?(cn?"义之":"義之"):(cn?"纯一":"純一");gridHoverSound=gridClickSound=255;Arrays.fill(voiceEnabled,(byte)1);registers.put(13,0);registers.put(19,0);registers.put(25,0);registers.put(26,8);registers.put(27,8);if(exe()){if(second){Arrays.fill(voiceEnabled,(byte)0);defaultsPc2();}else defaultsPc1();history.limit=999;scene.pauseEffectsInTransition=true;}}
+    /** Games on the DC2PC engine: same opcodes and the same host, a different exe. See tools/bind_pc2_family.py. */
+    private static final Set<String> PC2_FAMILY=new HashSet<>(Arrays.asList("dc2pc-5769","dc2ty-5f69","dc2sc-3b69","dc2fl-9c69","dcdx-7769","dc2bs-316c","dc2cckko-a96c","dc2ccotm-a86c","dcsv-636c","dcws-656c","dcas-4e69","ktlep-6e69"));
+    public static boolean pc2Family(String id){return PC2_FAMILY.contains(id);}
+    private boolean exactlyDc2pc(){return resources.profile.id.equals("dc2pc-5769");}
+    public static boolean supports(Profile p){return pc2Family(p.id)||p.id.equals("dcxx-005d")||p.id.equals("dcpc-2063")||p.id.equals("dc2-3363");}
+    public PcHost(CircusResources r,TextCodec c){super(r,c);second=pc2Family(r.profile.id);pc1=r.profile.id.equals("dcpc-2063")||r.profile.id.equals("dcxx-005d");original=r.profile.id.equals("dc2-3363");if(original||second&&!exactlyDc2pc())ui.quadLimit=60;System.arraycopy(PC_PALETTE,0,ui.palette,0,PC_PALETTE.length);boolean cn=c.charset.name().equalsIgnoreCase("GBK");boolean firstCast=!second||r.profile.id.equals("dcsv-636c")||r.profile.id.equals("dcws-656c")||r.profile.id.equals("dcdx-7769")||r.profile.id.equals("dcas-4e69")||r.profile.id.equals("ktlep-6e69");familyName=!firstCast?(cn?"樱内":"桜内"):(cn?"朝仓":"朝倉");givenName=!firstCast?(cn?"义之":"義之"):(cn?"纯一":"純一");gridHoverSound=gridClickSound=255;Arrays.fill(voiceEnabled,(byte)1);registers.put(13,0);registers.put(19,0);registers.put(25,0);registers.put(26,8);registers.put(27,8);if(exe()){if(second){Arrays.fill(voiceEnabled,(byte)0);defaultsPc2();}else defaultsPc1();history.limit=999;scene.pauseEffectsInTransition=true;}}
     /** 424D87: a choice stops the skip button. mode 9 keeps the toolbar under the options. */
     public boolean choiceWaiting(){return ui.waiting&&choiceCount>0&&!confirming&&!gridWaiting&&!history.active&&!nameInput.active&&!map.active;}
     @Override public void enterSystem()throws IOException{super.enterSystem();if(exe())choiceCount=0;}
@@ -264,7 +269,7 @@ public final class PcHost extends Dc2Host {
         switch(op){
         case "dm.audio.voice":lineVoice=voiceStops(text)?"":text;playVoice(text);return true;
         case "pc.system_call":callRequest=text;nextTicket();return true; // 415247: runs the named system script, and comes back here.
-        case "pc.character":case "pc.character_overlay":if(exe2()&&a.length>0&&a[0]>=0&&a[0]<4&&op.equals("pc.character")){boolean done=super.command("dm.scene.character",a,bytes);if(!text.isEmpty()&&!text.equals("--")){int[] c=pending[a[0]];int[] live=scene.characters[a[0]];live[0]=c[0];live[1]=c[1];live[2]=c[2]==0?100:c[2];}return done;}{
+        case "pc.character":case "pc.character_overlay":if(second&&a.length>0&&(a[0]<0||a[0]>=4))return true; /* DC2FL, DCDX and DCWS clear layers this engine has no actor for. */if(exe2()&&a.length>0&&a[0]>=0&&a[0]<4&&op.equals("pc.character")){boolean done=super.command("dm.scene.character",a,bytes);if(!text.isEmpty()&&!text.equals("--")){int[] c=pending[a[0]];int[] live=scene.characters[a[0]];live[0]=c[0];live[1]=c[1];live[2]=c[2]==0?100:c[2];}return done;}{
             boolean overlay=op.equals("pc.character_overlay");
             int[] slot=a.length>0?a:new int[]{overlay?1:0};
             return super.command(overlay?"dm.scene.character_overlay":"dm.scene.character",slot,bytes);
@@ -347,15 +352,18 @@ public final class PcHost extends Dc2Host {
         case "pc.choice.wait":if(exe())skipButton=false;ui.waiting=true;scene.publish(ui,0,0);nextTicket();return true;
         case "pc.wait":timedInput=true;if(exe()){if(dirty&&dirtyRevision==scene.revision)scene.publish(ui,0,0);dirty=false;waitDismissable=(a[1]&1)!=0;delay(timedWaitMillis(a));return true;}scene.publish(ui,0,0);delay(a[0]==0?-1:200L*a[0]);return true;
         case "dm.ui.commit":if(exe2())return true;return super.command(op,a,bytes); // 424DC2 draws off screen.
-        case "dm.audio.music":{if(exe()&&pc1&&a[0]==254)a=new int[]{read(99,254),a[1]}; /* 414E4A */boolean done=super.command(op,a,bytes);if(exe2()&&a[0]>=0&&a[0]<100&&read(99,14)!=0)write(95,a[0],1);return done;} // 429046: heard tracks unlock in the music page.
+        case "dm.audio.music":{if(exe()&&a[0]==254)a=new int[]{read(99,254),a[1]}; /* 414E4A */boolean done=super.command(op,a,bytes);if(exe2()&&a[0]>=0&&a[0]<100&&read(99,14)!=0)write(95,a[0],1);return done;} // 429046: heard tracks unlock in the music page.
         case "pc.effect":
             if(!second&&(a[0]==1||a[0]==3||a[0]==4)){scene.slots[16]="system/"+(a[0]==3?"YUKI01":a[0]==1?"SACRA01":"SACRA02");scene.effect(1,a[1]);return true;}
             if(second&&(a[0]==1||a[0]==3||a[0]==4||a[0]==11||a[0]==12)){scene.slots[16]="system/"+(a[0]==12?"SAKU_YUKI02":a[0]==11?"SAKU_YUKI01":a[0]==3?"YUKI01":a[0]==1?"SACRA01":"SACRA02");scene.effect(1,a[1]);return true;}
+            if(second&&(a[0]==21||a[0]==22)){unmodelled.add("effect "+a[0]);return true;}
             return super.command("dm.scene.effect",a,bytes);
         case "pc.transition":if(exe()&&transitionPc2(a))return true;if(a[0]==13){if(a[1]!=0&&a[1]!=1&&a[1]!=2)throw new IOException("PC2 mask variant "+a[1]);int minimum=a[1]==0?0:a[1]==1?(second?-191:-199):(second?-340:-348);int gain=0,ticks=1;while(minimum+gain<16){ticks++;gain+=Math.min(16,ticks);}scene.publish(ui,130+a[1],ticks*40L);delay(scene.transitionDuration);return true;}if(a[0]==7){return true;} // Native creates/releases a temporary transition bitmap, not a timed transition.
             if(second&&(a[0]==21||a[0]==22)){int[] rates={64,64,32,16,8,4,2,1};int duration=a[1]<8?40*(256+rates[a[1]]-1)/rates[a[1]]:(a[1]*5-35)*8*256;scene.publish(ui,200+a[0],duration);delay(duration);return true;}
             if(a[0]==9){captureUi();return true;} // Captured caller is a logical frame instead of a native render target.
-            if(a[0]==10||a[0]==12||a[0]==14){scene.publish(ui,0,200L*Math.max(1,a[1]));delay(scene.transitionDuration);return true;}return super.command("dm.scene.transition",a,bytes);
+            if(a[0]==10||a[0]==12||a[0]==14){scene.publish(ui,0,200L*Math.max(1,a[1]));delay(scene.transitionDuration);return true;}
+            if(second&&(a[0]==11||a[0]==15||a[0]==255))return true; // DCSV 4315BA and its kind prepare an effect surface; nothing shows and nothing waits.
+            return super.command("dm.scene.transition",a,bytes);
         case "pc.scroll":if(a[2]==2&&!(exe()&&pc1)){scene.portraitX=a[0];scene.portraitY=a[1];return true;}
             if(exe()&&pc1){ // 4145FB, 4168F0: any mode but 0 goes straight there; 10 ms steps otherwise.
                 if(a[2]!=0){scene.backgroundX=a[0];scene.backgroundY=a[1];scene.scrollStep=0;return true;}
@@ -388,7 +396,7 @@ public final class PcHost extends Dc2Host {
             case 2:case 3:case 5:case 10:case 12:case 17:return true;
             case 4:if(a[1]==1)autosaveGeneration++;else{saveRequest=read(99,254);nextTicket();}return true;
             case 6:variables.clearHistory();if(exe())history.clear();return true;case 7:if(!exe())skipAllowed=a[1]!=0;return true;case 11:messageMode=a[1];if(exe())history.clear();return true;case 13:inputMode=a[1];return true;
-            default:throw new IOException("Unimplemented PC persistence "+Arrays.toString(a));}
+            default:if(second&&!exactlyDc2pc()){unmodelled.add("persist "+Arrays.toString(a));return true;}throw new IOException("Unimplemented PC persistence "+Arrays.toString(a));}
         case "pc.wait.media_mask":if((a[0]&~7)!=0)throw new IOException("PC native media timer mask "+a[0]);return super.command("wait.audio",a,bytes); // 41ED22 / 4230E0: music=1, voice=2, SE=4.
         case "pc.voice_group.add":if(voiceGroup.size()<10)voiceGroup.add(text);return true;
         case "pc.voice_group.play":
@@ -408,9 +416,13 @@ public final class PcHost extends Dc2Host {
         case "pc.confirm":{
             List<Dc2Ui.Button> list=Dc2Ui.copyButtons(ui.buttonTemplates.get(2));if(list.size()<3)throw new IOException("PC original confirmation template missing");Dc2Ui.Button panel=list.get(0);int dx=confirmX-panel.left,dy=confirmY-panel.top;boolean caption=false;
             for(Dc2Ui.Button b:list){b.left+=dx;b.right+=dx;b.top+=dy;b.bottom+=dy;for(Dc2Ui.Quad q:b.sprites){q.x+=dx;q.y+=dy;if(b==panel&&q.type==2){q.text=codec.decode(bytes);q.width=Math.max(1,bytes.length*11);caption=true;}}}
-            if(!caption)throw new IOException("PC confirmation text anchor missing");ui.buttons.clear();ui.buttons.addAll(list);confirming=ui.waiting=true;gridWaiting=false;nextTicket();return true;
+            if(!caption&&(original||exactlyDc2pc()||resources.profile.id.equals("dcpc-2063")))throw new IOException("PC confirmation text anchor missing");ui.buttons.clear();ui.buttons.addAll(list);confirming=ui.waiting=true;gridWaiting=false;nextTicket();return true;
         }
+        case "pc.external":if(second){unmodelled.add("external "+text);return true;}return super.command(op,a,bytes); // DCWS starts separate mini game programs.
         case "pc.command":
+            // These numbers belong to each exe's own switch; only 6 is known to be shared with DC2PC's map and lists.
+            if(second&&!exactlyDc2pc()&&(a[0]==20||a[0]==21)){unmodelled.add("command "+Arrays.toString(a));if(a[0]==20&&resources.profile.id.equals("dcsv-636c"))variables.write(6,3,2);return true;} // DCSV's pinball is native code; its menu answers "back".
+            if(second&&a[0]==8){try{nameInput.prepare(resources,codec);nameInput.open(familyName,givenName);nameInput.build(ui);scene.publish(ui,0,0);nextTicket();}catch(IOException noTable){unmodelled.add("name editor "+noTable.getMessage());}return true;}
             if(!second&&a[0]==8){nameInput.prepare(resources,codec);nameInput.open(familyName,givenName);nameInput.build(ui);scene.publish(ui,0,0);nextTicket();return true;}if(second&&a[0]==9){if(exe())list.textStyle=3;return true;} /* 407C90: the music list, whose title bar 408A70 draws. */
             if(second&&a[0]==7){list.textStyle=4;return true;} // 408911 -> 407340: Scene list renderer; argument 1 is ignored.
             if(second&&a[0]==20){map.open(variables);map.buttons(ui);scene.publish(ui,0,0);nextTicket();return true;}if(a[0]==6){saveGrid=a[1]==0;return true;}
@@ -421,6 +433,7 @@ public final class PcHost extends Dc2Host {
             if(a[0]==1){calendar(a[1]);return true;}
             if(a[0]==2&&(a[1]==0||a[1]==1)){rank(a[1]);return true;}
             if(a[0]!=7&&a[0]!=8&&a[0]!=9&&a[0]!=10&&a[0]!=11&&a[0]!=100&&a[0]!=101)return true; // Explicit default return in 404EE0 / 408560.
+            if(second&&!exactlyDc2pc()){unmodelled.add("command "+Arrays.toString(a));return true;}
             throw new IOException("Unimplemented PC native system command "+Arrays.toString(a));
         default:return super.command(op,a,bytes);
         }
@@ -453,7 +466,7 @@ public final class PcHost extends Dc2Host {
         if(mode!=0&&mode!=1)return;
         if(mode==0){String n=script.name.replace('\\','/');n=n.substring(n.lastIndexOf('/')+1).toUpperCase(Locale.ROOT);
             if(second){
-                if(n.length()<9||!Character.isDigit(n.charAt(4))){variables.write(9,0,0);variables.write(9,1,0);variables.write(9,3,0);variables.write(9,20,5);}
+                if(n.length()<9||!n.substring(4,8).chars().allMatch(Character::isDigit)){variables.write(9,0,0);variables.write(9,1,0);variables.write(9,3,0);variables.write(9,20,5);}
                 else{int month=Integer.parseInt(n.substring(4,6)),day=Integer.parseInt(n.substring(6,8));variables.write(9,0,month);variables.write(9,1,day);variables.write(9,3,n.charAt(8)-'A');
                     int season=month==7&&day<22?(n.startsWith("S_GM0721E")||n.startsWith("S_GM0721F")?1:0):n.startsWith("S_AS")||n.startsWith("S_HS")?0:n.startsWith("S_GM")?1:2;
                     variables.write(9,80,season);variables.write(9,20,n.startsWith("S_AS")?3:n.startsWith("S_GM")?4:n.startsWith("S_TM")||n.startsWith("S_TT")?0:n.startsWith("S_MM")?2:n.startsWith("S_KN")||n.startsWith("S_KH")?1:5);

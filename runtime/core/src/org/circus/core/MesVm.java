@@ -90,8 +90,15 @@ public final class MesVm {
     }
     public boolean activateGrid(long ticket,int index)throws IOException {
         if(!(host instanceof FlowHost)||status!=Status.WAIT_HOST||ticket!=((FlowHost)host).waitTicket())return false;
-        byte[] action=host instanceof Dc2Host?((Dc2Host)host).menuActionForGrid(index):host instanceof Dc3Host?((Dc3Host)host).menuActionForGrid(index):null;if(action==null)return false;Integer target=script.label(action);if(target==null)throw new IOException("Grid action label missing");pc=target;status=Status.RUNNING;return true;
+        byte[] action=host instanceof Dc2Host?((Dc2Host)host).menuActionForGrid(index):host instanceof Dc3Host?((Dc3Host)host).menuActionForGrid(index):null;if(action==null)return false;Integer target=script.label(action);if(target==null&&PcHost.followsExe&&PcHost.pc2Family(script.profile.id))return false;if(target==null)throw new IOException("Grid action label missing");pc=target;status=Status.RUNNING;return true;
     }
+    /** A few games jump to a script they do not ship, such as DC2BS to scemode. Starting over beats stopping the game. */
+    private MesScript transferTarget(String name)throws IOException{
+        try{return library.script(name);}
+        catch(FileNotFoundException missing){if(PcHost.followsExe&&PcHost.pc2Family(script.profile.id)){pendingLabel=new byte[0];return library.script("START");}throw missing;}
+    }
+    /** The record that carries a second string; the oldest build numbers it two lower. */
+    private static int stringRecordOpcode(Profile p){return p.id.equals("dcxx-005d")?0x44:0x46;}
     private void emit(String op,int[] args,byte[] bytes)throws IOException{if(!host.command(op,args,bytes))throw new IOException("Unimplemented host effect: "+op);}
     /** Instruction trace used by the reverse-engineering probes; off unless -Dcircus.trace is set. */
     static final boolean TRACE=System.getProperty("circus.trace")!=null;
@@ -147,18 +154,18 @@ public final class MesVm {
         }
         case "block.marker":if(args[0]==0)next=script.scanBlock(next,(byte)args[1]);break;
         case "block.marker_unsigned":if(args[0]==0)next=script.scanBlock(next,args[1]);break;
-        case "pc.system_call":{MesScript.Record name=script.at(next);if(name.opcode!=0x46)throw new IOException("System call without its name");next=name.end;emit(op,args,name.bytes);break;}
+        case "pc.system_call":{MesScript.Record name=script.at(next);if(name.opcode!=stringRecordOpcode(p))throw new IOException("System call without its name");next=name.end;emit(op,args,name.bytes);break;}
         case "jump.named":if(host.allowNamedJump()){Integer target=script.label(r.bytes);if(target!=null)next=target;}break;
         case "jump.named_required":{
             Integer target=script.requiredLabel(r.bytes);if(target==null)throw new IOException("Required named label missing");next=target;break;
         }
-        case "pc.character_pair":case "pc.portrait_pair":{emit(op,new int[]{0},r.bytes);if(next<script.length()&&script.at(next).opcode==0x46){MesScript.Record pair=script.at(next);emit(op,new int[]{1},pair.bytes);next=pair.end;}break;}
+        case "pc.character_pair":case "pc.portrait_pair":{emit(op,new int[]{0},r.bytes);if(next<script.length()&&script.at(next).opcode==stringRecordOpcode(p)){MesScript.Record pair=script.at(next);emit(op,new int[]{1},pair.bytes);next=pair.end;}break;}
         case "script.entry_label":pendingLabel=r.bytes.clone();break;
         case "pc.script.transfer":case "dm.script.transfer":case "dm.script.transfer_alt":{
             // D.C.II encodes the mode byte only when the profile has a string8 class; 2C..48 carry none.
             int mode=op.equals("pc.script.transfer")?(args.length==0?1:args[0]==4?2:args[0]==3||args[0]==5?3:1):op.equals("dm.script.transfer_alt")?2:1;
             if(mode==1&&next<script.length()){MesScript.Record following=script.at(next);if(following.opcode==p.companion&&following.args[0]==1)mode=3;}
-            String name=Binary.safePath(new String(r.bytes,Binary.SJIS));MesScript target=library.script(name);
+            String name=Binary.safePath(new String(r.bytes,Binary.SJIS));MesScript target=transferTarget(name);
             if(!target.profile.id.equals(p.id))throw new IOException("Cross-profile transfer rejected");
             Integer dest=pendingLabel.length==0?target.firstOffset:target.requiredLabel(pendingLabel);
             if(dest==null)throw new IOException("Required entry label missing");
@@ -167,7 +174,7 @@ public final class MesVm {
         }
         case "script.transfer":case "script.transfer_alt":{
             int mode=op.equals("script.transfer")?0:1;String name=new String(r.bytes,Binary.SJIS);Binary.safePath(name);
-            MesScript target=library.script(name);if(!target.profile.id.equals(p.id))throw new IOException("Cross-profile transfer rejected");
+            MesScript target=transferTarget(name);if(!target.profile.id.equals(p.id))throw new IOException("Cross-profile transfer rejected");
             if(!host.beforeTransfer(mode,name))throw new IOException("Unverified script transition effects");
             if(host instanceof TitleHost&&((TitleHost)host).returnToTitle(mode,name,pendingLabel)){pendingLabel=new byte[0];status=Status.HALTED;return;}
             script=target;next=script.firstOffset;Integer label=script.label(pendingLabel);if(label!=null)next=label;pendingLabel=new byte[0];break;

@@ -36,7 +36,7 @@ public final class MesScript {
             Record r=decode(p);records.put(p,r);if(r.opcode==profile.label)labels.putIfAbsent(Binary.hex(r.bytes),p);p=r.end;
             if(profile.id.equals("dcpc-2063")&&r.opcode==0)break; // 41265F terminates; bytes beyond stop are not instructions.
             // These two PC2 scripts contain the literal trailer 61 64 after their terminal stop.
-            if(profile.id.equals("dc2pc-5769")&&r.opcode==0&&data.length-p==2&&data[p]==0x61&&data[p+1]==0x64)break;
+            if(PcHost.pc2Family(profile.id)&&r.opcode==0&&data.length-p==2&&data[p]==0x61&&data[p+1]==0x64)break;
         }
         if(records.isEmpty())throw new IOException("Empty MES code");
     }

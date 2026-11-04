@@ -56,7 +56,7 @@ public final class Dc3Layout {
 
     public static Dc3Layout of(String profileId){
         if(profileId.equals("dc3wy-a09f"))return WY;
-        if(profileId.equals("dc3pp-9872"))return PP;
+        if(Dc3Host.ppFamily(profileId))return PP;
         return DD;
     }
     /** True for the slots the cast occupies, including the pose-repeat block. */

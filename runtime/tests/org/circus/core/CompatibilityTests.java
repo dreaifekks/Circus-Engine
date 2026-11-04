@@ -104,8 +104,8 @@ public final class CompatibilityTests {
         check(files.readersOpened==2&&files.readersClosed==2,"Collection admission opens and closes one reader per script");
         files.files.put("AdvData/MES/third.mes",script(0xa5a8));reject(()->GameVersion.detect(new GameResources(files)),"mixed collection rejected even with a DM majority");files.files.remove("AdvData/MES/third.mes");
         files.files.put("AdvData/MES/main.mes",script(0x1111));reject(()->GameVersion.detect(new GameResources(files)),"unknown member is not silently ignored");
-        files.files.remove("AdvData/MES/main.mes");files.files.put("AdvData/MES/START.MES",new byte[]{0,0,0,0,0x5d,0,0,0});
-        GameVersion early=GameVersion.detect(new GameResources(files));check(early.profileId.equals("dcxx-005d"),"early single-byte framing can be identified separately");reject(()->early.profile(),"framing knowledge does not grant runtime compatibility");
+        files.files.remove("AdvData/MES/main.mes");files.files.put("AdvData/MES/START.MES",new byte[]{0,0,0,0,0x62,0,0,0});
+        GameVersion early=GameVersion.detect(new GameResources(files));check(early.profileId.equals("dcmems-0062"),"early single-byte framing can be identified separately");reject(()->early.profile(),"framing knowledge does not grant runtime compatibility");
         files.files.put("AdvData/MES/START.MES",new byte[]{1,0,0,0,0,0,0,0,0x69,0x6e,0x72,(byte)0x9d,0,0,0,0});
         reject(()->GameVersion.detect(new GameResources(files)),"one ambiguous header does not select a guessed profile");
         files.files.put("AdvData/MES/main.mes",script(0x9d72));

@@ -16,6 +16,8 @@ public class CircusResources {
     protected CircusResources(GameResources files,String profileId){this.files=files;this.profileId=profileId;profile=null;names=null;}
     public String named(String category,int index)throws IOException {
         List<NamesCatalog.Entry> entries=names.table(category);
+        // Scripts of these games ask for sounds their own table lacks, and the exe plays nothing.
+        if((index<0||index>=entries.size())&&PcHost.followsExe&&PcHost.pc2Family(profileId)&&(category.equals("sound")||category.equals("music")))return "";
         if(index<0||index>=entries.size())throw new IOException("NAMES "+category+" index "+index);
         return entries.get(index).name;
     }
@@ -66,10 +68,10 @@ public class CircusResources {
         if(parts.length==1){String file="AdvData/GRP/"+extension(Binary.nativeResourcePath(parts[0]),".CRX");
             // 423960: a repacked install keeps "bst\\name" in the archive named by the first ten characters of the name.
             if(PcHost.followsExe&&PcHost.supports(profile)&&reference.length()>10&&reference.regionMatches(true,0,"bst\\",0,4)&&!files.paths().contains(file.toLowerCase(Locale.ROOT)))return image(reference+","+reference.substring(0,10));
-            return tint(PcHost.supports(profile)?Crx.plain(files.read(file,128*1024*1024),true):files.image(file),filter,profile.id.equals("dc2pc-5769")?2:profile.id.equals("dcpc-2063")?1:0);}
+            return tint(PcHost.supports(profile)?Crx.plain(files.read(file,128*1024*1024),true):files.image(file),filter,PcHost.pc2Family(profile.id)?2:profile.id.equals("dcpc-2063")?1:0);}
         String archive="AdvData/GRP/"+extension(Binary.nativeResourcePath(parts[1]),".CRM");
         String entry=extension(basename(Binary.nativeResourcePath(parts[0])),".CRX");
-        return tint(files.imageAtOffset(archive,archiveEntry(archive,entry).offset),filter,profile.id.equals("dc2pc-5769")?2:profile.id.equals("dcpc-2063")?1:0);
+        return tint(files.imageAtOffset(archive,archiveEntry(archive,entry).offset),filter,PcHost.pc2Family(profile.id)?2:profile.id.equals("dcpc-2063")?1:0);
     }
     /** DD 44A1A0/44A2D0 and DM 405560/405690 integer transforms; transparent pixels are untouched. */
     static Crx.Image tint(Crx.Image source,char filter)throws IOException {return tint(source,filter,false);}
@@ -87,9 +89,11 @@ public class CircusResources {
         }
         return new Crx.Image(source.x,source.y,source.width,source.height,source.bpp,pixels,source.palette);
     }
+    /** Some games list a sound as "se/241.wav" and store it as se/241.PCM. */
+    private String withoutWave(String path){return PcHost.supports(profile)&&path.toLowerCase(Locale.ROOT).endsWith(".wav")&&!path.regionMatches(true,0,"VOICE/",0,6)?path.substring(0,path.length()-4):path;}
     public Xpcm audio(String reference)throws IOException {
         if(reference.startsWith("mix:"))return MixedVoice.decode(this,reference);
-        String path=Binary.nativeResourcePath(reference);
+        String path=withoutWave(Binary.nativeResourcePath(reference));
         if(path.regionMatches(true,0,"VOICE/",0,6)){
             String archive="AdvData/VOICE.DAT",entry=extension(path.substring(6).replace('/','\\'),".PCM");
             if(PcHost.supports(profile)){
@@ -106,7 +110,7 @@ public class CircusResources {
         // sample-wise mixer. Preserve those backends rather than interpreting
         // their references as ordinary XPCM paths.
         if(profile==null||reference.startsWith("mix:")){audio(reference).writeTo(out);return;}
-        String path=Binary.nativeResourcePath(reference);
+        String path=withoutWave(Binary.nativeResourcePath(reference));
         if(path.regionMatches(true,0,"VOICE/",0,6)){
             String archive="AdvData/VOICE.DAT",raw=path.substring(6).replace('/','\\');
             if(PcHost.supports(profile)){

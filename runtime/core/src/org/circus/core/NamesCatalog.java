@@ -16,7 +16,12 @@ public final class NamesCatalog {
     private final Map<String,List<Entry>> tables=new LinkedHashMap<>();
     public NamesCatalog(byte[] data)throws IOException {this(data,false);}
     public NamesCatalog(byte[] data,boolean legacy)throws IOException {
-        int nameWidth=legacy?128:32;int[] strides=legacy?new int[]{128,192,132,128,188}:STRIDES;
+        // The oldest build (温泉編) stores its scenario names without the extra 60 bytes.
+        if(legacy)try{parse(data,true,new int[]{128,192,132,128,188});}catch(IOException older){tables.clear();parse(data,true,new int[]{128,192,132,128,128});}
+        else parse(data,false,STRIDES);
+    }
+    private void parse(byte[] data,boolean legacy,int[] strides)throws IOException {
+        int nameWidth=legacy?128:32;
         int p=0;
         for(int t=0;t<CATEGORIES.length;t++){
             long count=Binary.u32(data,p);p+=4;

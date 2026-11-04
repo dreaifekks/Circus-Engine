@@ -386,7 +386,10 @@
       ],
       "title": "D.C.II Fall in Love ～ダ・カーポII～フォーリンラブ",
       "evidence": "reference_format_only",
-      "execution_supported": false
+      "execution_supported": false,
+      "mixed_versions": [
+        27753
+      ]
     },
     {
       "id": "dc2bs-316c",
@@ -426,7 +429,11 @@
       ],
       "title": "D.C.II ～ダ・カーポII～ 春風のアルティメットバトル! （D.C.～ダ・カーポ～アーカイブス　SAKURA Edition）",
       "evidence": "reference_format_only",
-      "execution_supported": false
+      "execution_supported": false,
+      "mixed_versions": [
+        39273,
+        12646
+      ]
     },
     {
       "id": "dc2dm-9d72",

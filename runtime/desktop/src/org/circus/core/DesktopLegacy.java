@@ -29,7 +29,7 @@ public final class DesktopLegacy extends DesktopEngine {
     private String pendingSystemAction;
     private final Dc2NativeData nativeData;
     public DesktopLegacy(CircusResources data,TextCodec codec,boolean audit)throws Exception {
-        super(data,codec,audit,PcHost.supports(data.profile)?800:1024,PcHost.supports(data.profile)?600:576);
+        super(data,codec,audit,PcHost.supports(data.profile)&&!data.profile.id.equals("dcdx-7769")?800:1024,PcHost.supports(data.profile)&&!data.profile.id.equals("dcdx-7769")?600:576);
         session=new Dc2Session(data,codec);captures=new DesktopCaptures(width,height,this::drawCapture);captures.screen=()->lastFrame;host().captureRenderer=captures;nativeData=PcHost.supports(data.profile)?null:new Dc2NativeData(data,codec);
         Path progress=saveDirectory.resolve("progress.dat");if(!audit&&Files.exists(progress))try(DataInputStream in=new DataInputStream(Files.newInputStream(progress))){host().loadPersistent(in);}
         scanSaves();
@@ -172,6 +172,7 @@ public final class DesktopLegacy extends DesktopEngine {
         if(key.equals(":qload")||key.equals(":ql")){if(Files.exists(slot(1)))readSlot(1);toolbar=false;return;}
         String script=key.equals(":backlog")?"LOG":key.equals(":torisetu")?"MANUAL":key.equals(":option")&&(host() instanceof PcHost||followsDm())?"OPTION":key.equals(":menu")||key.equals(":option")?"ADVMENU":null;
         if(script!=null){requestSystem(script);return;}
+        if(followsPc2Exe()&&!resources.profileId.equals("dc2pc-5769"))return; // Another game's own toolbar command, not reproduced.
         throw new IOException("Unimplemented original system action "+a);
     }
     /** Input may arrive after ADVANCE releases a wait but before the next tick runs MES. */
@@ -461,7 +462,7 @@ public final class DesktopLegacy extends DesktopEngine {
         g.setColor(Color.BLACK);g.fillRect(0,0,width,height);
         // Scroll arguments are already drawing offsets: an 800x1200 background scrolls to y=-600 to show its lower half.
         at(g,f.slots[1],DesktopMac.ACTIVE?f.x:-f.x,DesktopMac.ACTIVE?f.y:-f.y);
-        boolean pc2=resources.profileId.equals("dc2pc-5769");
+        boolean pc2=PcHost.pc2Family(resources.profileId);
         // PC2 41A950 visits actor slots 0..3, so a later close-up covers earlier actors.
         for(int order=0;order<4;order++){int n=pc2?order:3-order;int[] a=f.actors[n];if(captureState==null&&f==host().scene.shown&&followsExe())a=host().scene.presented(n,a);for(int slot:new int[]{n+2,n+6}){String name=slot==n+6?resources.characterOverlay(f.slots[n+2],f.slots[slot]):f.slots[slot];Picture p=picture(name);if(p==null)continue;
             if(pc2){PcActorLayout r=PcActorLayout.dc2pc(a,p.raw.width,p.raw.height);g.drawImage(p.image,r.x,r.y,r.x+r.width,r.y+r.height,0,0,p.raw.width,p.raw.height,null);}

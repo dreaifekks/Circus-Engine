@@ -21,7 +21,7 @@ public class Dc2Host implements MesVm.ContextHost,MesVm.MenuHost,MesVm.ChoiceHos
     public UiCapture uiCapture;public UiCapture.Renderer captureRenderer;public boolean fullscreen;public int windowRequest=-1;private final int[] confirmations=new int[20];private final byte[] voicePreferences=new byte[256];public int voiceCharacter=17,voicePan;private byte[] automaticMenuAction;
     public final Set<Integer> availableSaves=new HashSet<>();
     /** Opcodes whose record shape is verified but whose visual effect is not modelled yet. */
-    public final List<String> unmodelled=new ArrayList<>();
+    public final List<String> unmodelled=new ArrayList<String>(){@Override public boolean add(String s){return size()<256&&!contains(s)&&super.add(s);}};
     public final Set<String> readCheckpoints=new TreeSet<>();
     public final String[] audio={"","","","","",""};
     public final int[] audioGeneration=new int[6];
@@ -232,7 +232,7 @@ public class Dc2Host implements MesVm.ContextHost,MesVm.MenuHost,MesVm.ChoiceHos
         case "text.body":scene.publish(ui,0,0);if(!speakerPending||messageMode!=0)speaker="";speakerPending=false;body=Dc2Text.plain(bytes,codec);unlock("scenario_scripts",script.name,98);if(!body.isEmpty())history.append(speaker,body,lineVoice,script.name,pc);lineVoice="";presentationWaiting=true;textRendered=false;scene.revision++;nextTicket();return true;
         case "dm.wait.message":textWaiting=true;nextTicket();return true;
         case "variable.indirect_result":state.indirectResult(a[0]);return true;
-        case "system.version":ui.version+=text(bytes);require(ui.version.length()<128,"version length");return true;
+        case "system.version":if(PcHost.followsExe&&ui.version.length()>=120)return true;ui.version+=text(bytes);require(ui.version.length()<128,"version length");return true;
         case "dm.ui.quad_template":ui.storeQuads(a[0],a[1]);if(a[0]==0&&scene.mode==0)scene.mode=2;return true;
         case "dm.ui.button_template":ui.storeButtons(a[0]);return true;
         case "dm.ui.resource":require(a[0]>=0&&a[0]<5,"UI slot");if(!text(bytes).equals("-"))scene.slots[21+a[0]]=text(bytes);return true;
