@@ -9,13 +9,16 @@ import java.util.Random;
  */
 final class PcShatter {
     static final int COLUMNS=25,ROWS=19;
+    private final int pace;
     private final int[] life=new int[COLUMNS*ROWS],delay=new int[life.length],vx=new int[life.length],vy=new int[life.length],t=new int[life.length];
     final int[] x=new int[life.length],y=new int[life.length],alpha=new int[life.length];
     PcShatter(int mode,long seed){
-        Random r=new Random(seed);
+        Random r=new Random(seed);pace=mode==9?327:81; // (speed<<13)/100; only mode 9 asks for speed 4.
         for(int row=0;row<ROWS;row++)for(int col=0;col<COLUMNS;col++){
             int n=row*COLUMNS+col;life[n]=16+r.nextInt(32);alpha[n]=16;x[n]=col<<15;y[n]=row<<15;
             if(mode==5){delay[n]=-(2*row+col);vx[n]=(2-(r.nextBoolean()?8:0))<<10;vy[n]=((r.nextBoolean()?8:0)-2)<<10;} // 418E80
+            else if(mode==9){vx[n]=(r.nextInt(16)-8)<<10;vy[n]=(-32-r.nextInt(32))<<10;} // Vista 410E1C
+            else if(mode==6){delay[n]=-(Math.abs(9-row)+Math.abs(12-col));vx[n]=(4-(r.nextBoolean()?8:0))<<10;vy[n]=(4-(r.nextBoolean()?8:0))<<10;} // Vista 410D9D
             else{vx[n]=(r.nextBoolean()?1+r.nextInt(32):r.nextInt(32)-32)<<10;vy[n]=(32-(r.nextInt(4)<<4))<<10;} // 418E07
         }
     }
@@ -30,7 +33,7 @@ final class PcShatter {
             x[n]=(col<<15)+4*(int)(((long)vx[n]*now)/1024);
             y[n]=(row<<15)-(int)(((long)vy[n]*now)/1024)-(int)(((long)((now*4008L)/1024)*now)/1024);
             if(x[n]>=800<<10||y[n]>=600<<10)life[n]=0;
-            life[n]--;t[n]=now+81;delay[n]++;
+            life[n]--;t[n]=now+pace;delay[n]++;
             if(life[n]<=16){alpha[n]=Math.max(0,life[n]);if(life[n]<=0)life[n]=0;}
             alive|=life[n]>0;
         }

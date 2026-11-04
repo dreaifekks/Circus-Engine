@@ -18,34 +18,39 @@ public final class PcNameInput {
     public void prepare(CircusResources resources,TextCodec codec)throws IOException {
         if(prepared)return;Dc2NativeData.Pe pe=null;
         for(String path:resources.files.executableCandidates()){
-            try{Dc2NativeData.Pe candidate=new Dc2NativeData.Pe(resources.files.read(path,4*1024*1024));if((candidate.bytes[candidate.at(0x40c2e0)]&255)!=0x8b)throw new IOException("DCPC name table signature");pe=candidate;break;}
+            try{Dc2NativeData.Pe candidate=new Dc2NativeData.Pe(resources.files.read(path,4*1024*1024));if(tableShift(candidate)==0&&(candidate.bytes[candidate.at(0x40c2e0)]&255)!=0x8b)throw new IOException("DCPC name table signature");pe=candidate;break;}
             catch(IOException invalid){if(resources.files.explicitExecutable())throw new IOException("所选 EXE 不含兼容的 D.C.P.C 姓名表："+path,invalid);}
         }
         if(pe==null)throw new IOException("姓名输入需要兼容的 EXE 数据表，请在游戏设置中选择原版或兼容的补丁 EXE");
-        if((pe.bytes[pe.at(0x40c2e0)]&255)!=0x8b)throw new IOException("DCPC name table signature mismatch");
-        for(int n=0;n<14;n++)for(int k=0;k<7;k++)rectangles[n][k]=word(pe,0x4306a0+n*28+k*4);
-        for(int n=0;n<63;n++)for(int k=0;k<4;k++)atlas[n][k]=word(pe,0x430828+n*16+k*4);
-        for(int n=0;n<51;n++)groups[n]=word(pe,0x43c57c+n*4);
+        final int shift=tableShift(pe);if(shift==0&&(pe.bytes[pe.at(0x40c2e0)]&255)!=0x8b)throw new IOException("DCPC name table signature mismatch");
+        for(int n=0;n<14;n++)for(int k=0;k<7;k++)rectangles[n][k]=word(pe,shift+0x4306a0+n*28+k*4);
+        for(int n=0;n<63;n++)for(int k=0;k<4;k++)atlas[n][k]=word(pe,shift+0x430828+n*16+k*4);
+        for(int n=0;n<51;n++)groups[n]=word(pe,shift+0x43c57c+n*4);
         // The localized PE converts the four literal grids to GBK but leaves the
         // numeric CP932 character ranges unchanged. Identify the kana by bytes.
-        byte[] firstRow=pe.stringBytes(0x430cb8);TextCodec tableCodec=null;
+        byte[] firstRow=pe.stringBytes(shift+0x430cb8);TextCodec tableCodec=null;
         for(String encoding:new String[]{"windows-31j","GBK"}){TextCodec candidate=new TextCodec("","",encoding);try{if(candidate.decode(firstRow).startsWith("あいうえお"))tableCodec=candidate;}catch(IOException invalid){}}
         if(tableCodec==null)throw new IOException("Unrecognized DCPC name table encoding");
-        tables.add(rows(pe,tableCodec,0x430cb8,60,7));tables.add(rows(pe,tableCodec,0x430e98,60,7));tables.add(rows(pe,tableCodec,0x431078,60,14));
-        tables.add(rows(pe,tableCodec,0x4313fc,40,4));
+        tables.add(rows(pe,tableCodec,shift+0x430cb8,60,7));tables.add(rows(pe,tableCodec,shift+0x430e98,60,7));tables.add(rows(pe,tableCodec,shift+0x431078,60,14));
+        tables.add(rows(pe,tableCodec,shift+0x4313fc,40,4));
         for(int n=0;n<44;n++){
-            int first=word(pe,0x43c64c+n*8),last=word(pe,0x43c650+n*8);if(first<0||last<first||last-first>65536)throw new IOException("DCPC character range");
+            int first=word(pe,shift+0x43c64c+n*8),last=word(pe,shift+0x43c650+n*8);if(first<0||last<first||last-first>65536)throw new IOException("DCPC character range");
             List<String> rows=new ArrayList<>();StringBuilder row=new StringBuilder();
             for(int cp=first;cp<=last;cp++){
-                boolean excluded=false;for(int a=0x43c7ac;a<0x43c8a4;a+=8)if(cp>=word(pe,a)&&cp<=word(pe,a+4)){excluded=true;break;}
+                boolean excluded=false;for(int a=shift+0x43c7ac;a<shift+0x43c8a4;a+=8)if(cp>=word(pe,a)&&cp<=word(pe,a+4)){excluded=true;break;}
                 if(excluded)continue;
                 row.append(TextCodec.cp932(new byte[]{(byte)(cp>>>8),(byte)cp}));
-                if(n==15&&cp==0x91f2)row.append(pe.string(0x43c8a4));
+                if(n==15&&cp==0x91f2)row.append(pe.string(shift+0x43c8a4));
                 if(row.length()>=17){rows.add(row.toString());row.setLength(0);}
             }
             if(row.length()>0)rows.add(row.toString());tables.add(rows);
         }
-        boolean chinese=codec.charset.name().equalsIgnoreCase("GBK");defaultFamily=chinese?"朝仓":codec.apply(tableCodec.decode(pe.stringBytes(0x43c8b4)));defaultGiven=chinese?"纯一":codec.apply(tableCodec.decode(pe.stringBytes(0x43c8ac)));confirmationText=chinese?"使用这个姓名吗？":codec.apply(tableCodec.decode(pe.stringBytes(0x43c8bc)));prepared=true;
+        boolean chinese=codec.charset.name().equalsIgnoreCase("GBK");defaultFamily=chinese?"朝仓":codec.apply(tableCodec.decode(pe.stringBytes(shift+0x43c8b4)));defaultGiven=chinese?"纯一":codec.apply(tableCodec.decode(pe.stringBytes(shift+0x43c8ac)));confirmationText=chinese?"使用这个姓名吗？":codec.apply(tableCodec.decode(pe.stringBytes(shift+0x43c8bc)));prepared=true;
+    }
+    /** The Vista build carries the same tables 0x3080 bytes later; code bytes are no help, so look for the first row. */
+    private static int tableShift(Dc2NativeData.Pe pe){
+        try{byte[] row=pe.stringBytes(0x433d38),kana="あいうえお".getBytes(Binary.SJIS);if(row.length<kana.length)return 0;for(int n=0;n<kana.length;n++)if(row[n]!=kana[n])return 0;return 0x3080;}
+        catch(IOException e){return 0;}
     }
     private static int word(Dc2NativeData.Pe pe,int address)throws IOException{return (int)Binary.u32(pe.bytes,pe.at(address));}
     private static List<String> rows(Dc2NativeData.Pe pe,TextCodec codec,int address,int stride,int limit)throws IOException {

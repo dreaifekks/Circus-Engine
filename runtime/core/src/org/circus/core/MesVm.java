@@ -146,6 +146,7 @@ public final class MesVm {
         }
         case "block.marker":if(args[0]==0)next=script.scanBlock(next,(byte)args[1]);break;
         case "block.marker_unsigned":if(args[0]==0)next=script.scanBlock(next,args[1]);break;
+        case "pc.system_call":{MesScript.Record name=script.at(next);if(name.opcode!=0x46)throw new IOException("System call without its name");next=name.end;emit(op,args,name.bytes);break;}
         case "jump.named":if(host.allowNamedJump()){Integer target=script.label(r.bytes);if(target!=null)next=target;}break;
         case "jump.named_required":{
             Integer target=script.requiredLabel(r.bytes);if(target==null)throw new IOException("Required named label missing");next=target;break;

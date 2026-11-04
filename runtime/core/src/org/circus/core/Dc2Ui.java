@@ -17,10 +17,10 @@ public final class Dc2Ui {
     public static final class Button {
         public int left,top,right,bottom,hoverSound=255,clickSound=255,flags,binding;
         public int[] navigation=new int[4];
-        public String action="",voice="";
+        public String action="",voice="",hoverVoice="";
         public final List<Quad> sprites=new ArrayList<>();
-        void save(DataOutput o)throws IOException{for(int v:new int[]{left,top,right,bottom,hoverSound,clickSound,flags,binding})o.writeInt(v);for(int v:navigation)o.writeInt(v);o.writeUTF(action);o.writeUTF(voice);saveQuads(o,sprites);}
-        static Button load(DataInput i)throws IOException{Button b=new Button();b.left=i.readInt();b.top=i.readInt();b.right=i.readInt();b.bottom=i.readInt();b.hoverSound=i.readInt();b.clickSound=i.readInt();b.flags=i.readInt();b.binding=i.readInt();for(int n=0;n<4;n++)b.navigation[n]=i.readInt();b.action=i.readUTF();b.voice=i.readUTF();b.sprites.addAll(loadQuads(i,14));return b;}
+        void save(DataOutput o)throws IOException{for(int v:new int[]{left,top,right,bottom,hoverSound,clickSound,flags,binding})o.writeInt(v);for(int v:navigation)o.writeInt(v);o.writeUTF(action);o.writeUTF(hoverVoice.isEmpty()?voice:voice+'\u0001'+hoverVoice);saveQuads(o,sprites);}
+        static Button load(DataInput i)throws IOException{Button b=new Button();b.left=i.readInt();b.top=i.readInt();b.right=i.readInt();b.bottom=i.readInt();b.hoverSound=i.readInt();b.clickSound=i.readInt();b.flags=i.readInt();b.binding=i.readInt();for(int n=0;n<4;n++)b.navigation[n]=i.readInt();b.action=i.readUTF();b.voice=i.readUTF();int mark=b.voice.indexOf('\u0001');if(mark>=0){b.hoverVoice=b.voice.substring(mark+1);b.voice=b.voice.substring(0,mark);}b.sprites.addAll(loadQuads(i,14));return b;}
     }
     public final List<Quad> quads=new ArrayList<>();
     public final List<Button> buttons=new ArrayList<>();

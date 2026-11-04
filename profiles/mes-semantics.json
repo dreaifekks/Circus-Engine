@@ -1273,6 +1273,7 @@
         "0x17": "pc.button_template",
         "0x18": "pc.fullscreen",
         "0x19": "pc.sprite_opaque",
+        "0x1A": "pc.prompt_position",
         "0x1B": "pc.save_context",
         "0x1C": "dm.system.return",
         "0x1D": "pc.command",
@@ -1282,6 +1283,7 @@
         "0x23": "pc.random",
         "0x24": "pc.voice_group.play",
         "0x25": "pc.resource_payload",
+        "0x26": "pc.system_call",
         "0x2A": "pc.rapid_binding",
         "0x2B": "pc.effect",
         "0x2E": "pc.background",
@@ -1308,6 +1310,8 @@
         "0x44": "pc.confirm",
         "0x45": "choice.item",
         "0x46": "choice.caption",
+        "0x47": "pc.voice_group.add",
+        "0x48": "ui.music_end_action",
         "0x4B": "text.speaker",
         "0x4C": "text.body",
         "0x4D": "choice.caption",
@@ -1317,6 +1321,7 @@
         "0x51": "ui.button_text",
         "0x52": "arguments.extend",
         "0x53": "pc.quad",
+        "0x54": "pc.grid.configure",
         "0x55": "dm.ui.grid_rect",
         "0x58": "variable.update",
         "0x59": "variable.copy",
@@ -1327,10 +1332,7 @@
         "0x5E": "pc.scroll",
         "0x60": "pc.actor_position",
         "0x61": "pc.actor_transform",
-        "0x62": "dm.ui.palette",
-        "0x54": "pc.grid.configure",
-        "0x47": "pc.voice_group.add",
-        "0x1A": "pc.prompt_position"
+        "0x62": "dm.ui.palette"
       }
     },
     "dc2-3363": {

@@ -39,11 +39,11 @@ public final class DesktopLegacy extends DesktopEngine {
     private boolean timedInput(){return host() instanceof PcHost&&((PcHost)host()).hasTimedInput();}
     public void tick(long elapsed)throws Exception {
         if(flash>0){flash-=elapsed;return;} // 41D980: the white flash holds the script and the particles.
-        Dc2Host h=host();boolean exe=followsPc2Exe();if(exe)((PcHost)h).ctrlHeld=rapid;h.fullscreen=fullscreenRequested;session.vm.elapse(elapsed);
+        Dc2Host h=host();boolean exe=followsExe();if(exe)((PcHost)h).ctrlHeld=rapid;h.fullscreen=fullscreenRequested;session.vm.elapse(elapsed);
         if(h.presentationWaiting||h.textWaiting){if(textTicket!=h.waitTicket()){textClock=0;textTicket=h.waitTicket();}textClock+=elapsed;if(textClock>=textDuration())session.vm.signalHost(h.waitTicket(),MesVm.HostSignal.TEXT_COMPLETE);}
-        if(h.returnRequested){session.returnToStory();finishSystemAudio();h=host();if(exe){((PcHost)h).ctrlHeld=rapid;if(h.read(99,19)==4){((PcHost)h).leaveForLabel();session.vm.jump("new");}}}
+        if(h.returnRequested){session.returnToStory();finishSystemAudio();h=host();if(exe){((PcHost)h).ctrlHeld=rapid;if(followsPc2Exe()&&h.read(99,19)==4){((PcHost)h).leaveForLabel();session.vm.jump("new");}}}
         MesVm.Status status=session.vm.run(1000);if(status==MesVm.Status.FAULT)throw new IOException(session.vm.error());session.observeTransfer();
-        if(exe&&((PcHost)h).callRequest!=null){String called=((PcHost)h).callRequest;((PcHost)h).callRequest=null;if(!session.inSystem()){beginSystemAudio();session.openCall(called);auto=false;toolbar=false;return;}}if(h.windowRequest>=0){fullscreenRequested=h.windowRequest!=0;h.windowRequest=-1;}
+        if(h instanceof PcHost&&((PcHost)h).callRequest!=null){String called=((PcHost)h).callRequest;((PcHost)h).callRequest=null;if(!session.inSystem()){beginSystemAudio();session.openCall(called);auto=false;toolbar=false;return;}}if(h.windowRequest>=0){fullscreenRequested=h.windowRequest!=0;h.windowRequest=-1;}
         session.captureHistory();
         if(!session.inSystem()&&!h.body.isEmpty())lastLine=h.body;
         if(!h.keepsOnlyLogText()&&!session.inSystem()&&(h.textWaiting||h.presentationWaiting)&&!h.history.entries.isEmpty()){Dc2History.Entry entry=h.history.entries.get(h.history.entries.size()-1);if(entry.scene.length==0){ByteArrayOutputStream b=new ByteArrayOutputStream();h.scene.shown.save(new DataOutputStream(b));entry.scene=b.toByteArray();}}
@@ -60,7 +60,7 @@ public final class DesktopLegacy extends DesktopEngine {
         }
         if(pendingSystemAction==null&&!h.ui.waiting&&(rapid&&h.skipAllowed||(auto||h instanceof PcHost&&h.read(99,13)>=2)&&textClock>autoDelay()&&!h.audioActive[5]))session.vm.signalHost(h.waitTicket(),MesVm.HostSignal.ADVANCE);
     }
-    public java.util.List<Dc2Ui.Button> buttons(){Dc2Host h=host();if(h.ui.waiting){boolean choice=followsPc2Exe()&&((PcHost)h).choiceWaiting();if(hidden&&(choice||followsPc2Exe()&&h.history.active))return Collections.emptyList();java.util.List<Dc2Ui.Button> bs=new ArrayList<>(h.ui.buttons);if(choice)bs.addAll(h.ui.buttonTemplates.get(h.messageMode==0?1:4)); /* 424D22: the toolbar stays usable over a choice; it comes last so option numbers hold. */if(h.gridWaiting)for(int n=0;n<h.grid.size();n++){Dc2Ui.Button b=h.grid.get(n);b.action="@slot:"+n;bs.add(b);}return bs;}return !h.body.isEmpty()&&!hidden?h.ui.buttonTemplates.get(host() instanceof PcHost?(h.messageMode==0?1:4):(toolbar?6:1)):Collections.emptyList();}
+    public java.util.List<Dc2Ui.Button> buttons(){Dc2Host h=host();if(h.ui.waiting){boolean choice=followsExe()&&((PcHost)h).choiceWaiting();if(hidden&&(choice||followsExe()&&h.history.active))return Collections.emptyList();java.util.List<Dc2Ui.Button> bs=new ArrayList<>(h.ui.buttons);if(choice)bs.addAll(h.ui.buttonTemplates.get(h.messageMode==0?1:4)); /* 424D22: the toolbar stays usable over a choice; it comes last so option numbers hold. */if(h.gridWaiting)for(int n=0;n<h.grid.size();n++){Dc2Ui.Button b=h.grid.get(n);b.action="@slot:"+n;bs.add(b);}return bs;}return !h.body.isEmpty()&&!hidden?h.ui.buttonTemplates.get(host() instanceof PcHost?(h.messageMode==0?1:4):(toolbar?6:1)):Collections.emptyList();}
     /** 40B39A, 4125F0, 41FFC0: the wheel pages long lists and steps through the log in text waits. */
     private void scrollPc2(int units)throws Exception{
         PcHost h=(PcHost)host();
@@ -69,18 +69,20 @@ public final class DesktopLegacy extends DesktopEngine {
         if(h.gridWaiting&&h.list.active()){int page=h.variables.read(3,30)!=0||h.variables.read(3,31)!=0?h.grid.size():h.list.columns;h.write(99,246,h.list.clamp(h.read(99,246)+Integer.signum(units)*page,h.grid.size()));return;}
         if(h.history.active){h.scrollHistory(units);return;}
         boolean choice=h.choiceWaiting();
+        if(h.pc1&&units>0){h.play(5,"",false);return;} // 419A08: outside the log the wheel never advances.
         if(choice&&units>0)return; // 420020: going down only means something inside the log.
         if(units<0&&(choice||h.textWaiting||h.presentationWaiting)&&!h.hasEarlierLine(choice))return;
         if(choice||h.textWaiting||h.presentationWaiting){if(!choice)h.play(5,"",false);action(units<0?":up":":down");}
     }
-    public void scroll(int units)throws Exception{if(followsPc2Exe()){scrollPc2(units);return;}if(host().history.active&&!(host() instanceof PcHost)){host().history.scroll(units);host().historyButtons();return;}if(host() instanceof PcHost){PcHost h=(PcHost)host();if(h.gridWaiting&&h.list.active())h.write(99,246,h.list.clamp(h.read(99,246)+units*h.list.columns,h.grid.size()));}}
+    public void scroll(int units)throws Exception{if(followsExe()){scrollPc2(units);return;}if(host().history.active&&!(host() instanceof PcHost)){host().history.scroll(units);host().historyButtons();return;}if(host() instanceof PcHost){PcHost h=(PcHost)host();if(h.gridWaiting&&h.list.active())h.write(99,246,h.list.clamp(h.read(99,246)+units*h.list.columns,h.grid.size()));}}
     public void click(int x,int y,boolean right)throws Exception {
         Dc2Host h=host();
         if(inputBlocked())return;
-        if(right&&followsPc2Exe()&&((PcHost)h).skipButton&&!h.ui.waiting){((PcHost)h).skipButton=false;return;} // 422A81: right click only stops the skip.
+        if(followsExe())((PcHost)h).menuActivity();
+        if(right&&followsExe()&&((PcHost)h).skipButton&&!h.ui.waiting){((PcHost)h).skipButton=false;return;} // 422A81: right click only stops the skip.
         if(h instanceof PcHost&&((PcHost)h).nameInput.active){PcHost p=(PcHost)h;if(right){p.nameAction("@name:cancel");return;}for(Control b:controls())if(b.contains(x,y)){p.nameAction(b.action);return;}return;}
         if(hidden){hidden=false;return;}
-        boolean exe=followsPc2Exe();
+        boolean exe=followsExe();
         if(exe&&right&&((PcHost)h).choiceWaiting()){action(":menu");return;} // 4232D6
         if(exe&&!h.ui.waiting&&!h.textWaiting&&!h.presentationWaiting&&!((PcHost)h).pcCredits.active&&!h.credits.active()){
             // 422BF4, 422BBF: fades ignore input; a timed wait takes its actions, or a click if bit 0 allows it.
@@ -105,16 +107,16 @@ public final class DesktopLegacy extends DesktopEngine {
     }
     /** 41137B snaps with a 4 px offset. */
     private int sliderValue(Dc2Ui.Quad q,int x){
-        if(followsPc2Exe()){int span=Math.max(1,q.y-q.x);return Math.max(0,Math.min(q.sx-1,((x-q.x-4)*Math.max(0,q.sx-1)+span/2)/span));}
+        if(followsExe()){int span=Math.max(1,q.y-q.x);return Math.max(0,Math.min(q.sx-1,((x-q.x-4)*Math.max(0,q.sx-1)+span/2)/span));}
         return (int)Math.round(Math.max(0,Math.min(1,(x-q.x)/(double)Math.max(1,q.y-q.x)))*Math.max(0,q.sx-1));
     }
     /** 4144E0: only inside the bar, not snapped to columns. */
     private int scrollPc2Offset(PcHost h,int y){int[] b=h.gridBounds;return h.list.clamp((y-b[1])*(h.list.size()-h.grid.size()+1)/Math.max(1,b[3]-b[1]),h.grid.size());}
     private void scrollbarPc2(PcHost h,int y)throws IOException{int next=scrollPc2Offset(h,y);if(next!=h.read(99,246)){h.write(99,246,next);if(h.gridHoverSound!=255)h.play(1,resources.named("sound",h.gridHoverSound),false);}}
     public boolean drag(int x,int y,boolean begin)throws Exception{
-        if(begin){dragged=null;dragKind=0;Dc2Host h=host();if(!h.ui.waiting)return false;if(h.history.active&&!(h instanceof PcHost)&&x>=944&&x<984&&y>=112&&y<444)dragKind=1;else if(h instanceof PcHost&&h.gridWaiting&&((PcHost)h).list.active()){int[] b=((PcHost)h).gridBounds;int margin=followsPc2Exe()?0:4;if(x>=b[0]-margin&&x<b[2]+margin&&y>=b[1]&&y<b[3])dragKind=2;}if(dragKind==0)for(Dc2Ui.Button b:h.ui.buttons)if(x>=b.left&&x<b.right&&y>=b.top&&y<b.bottom)for(Dc2Ui.Quad q:b.sprites)if(q.state==5)dragged=b;}
+        if(begin){dragged=null;dragKind=0;Dc2Host h=host();if(!h.ui.waiting)return false;if(h.history.active&&!(h instanceof PcHost)&&x>=944&&x<984&&y>=112&&y<444)dragKind=1;else if(h instanceof PcHost&&h.gridWaiting&&((PcHost)h).list.active()){int[] b=((PcHost)h).gridBounds;int margin=followsExe()?0:4;if(x>=b[0]-margin&&x<b[2]+margin&&y>=b[1]&&y<b[3])dragKind=2;}if(dragKind==0)for(Dc2Ui.Button b:h.ui.buttons)if(x>=b.left&&x<b.right&&y>=b.top&&y<b.bottom)for(Dc2Ui.Quad q:b.sprites)if(q.state==5)dragged=b;}
         if(dragKind==1){Dc2History h=host().history;int max=Math.max(0,h.entries.size()-4);h.cursor=Math.max(0,Math.min(max,(int)Math.round((y-112)*max/300.0)));host().historyButtons();return true;}
-        if(dragKind==2&&followsPc2Exe()){PcHost h=(PcHost)host();int[] b=h.gridBounds;scrollbarPc2(h,Math.max(b[1],Math.min(b[3]-1,y)));return true;}
+        if(dragKind==2&&followsExe()){PcHost h=(PcHost)host();int[] b=h.gridBounds;scrollbarPc2(h,Math.max(b[1],Math.min(b[3]-1,y)));return true;}
         if(dragKind==2){PcHost h=(PcHost)host();int[] b=h.gridBounds;int cy=Math.max(b[1],Math.min(b[3]-1,y));h.write(99,246,y>=b[3]?h.list.clamp(Integer.MAX_VALUE,h.grid.size()):h.list.scrollAt((b[0]+b[2])/2,cy,b,h.read(99,246),h.grid.size()));return true;}
         if(dragged==null)return false;Dc2Ui.Quad cfg=null,stops=null;for(Dc2Ui.Quad q:dragged.sprites){if(q.state==5)cfg=q;if(q.state==7)stops=q;}if(cfg==null)return false;
         int value=sliderValue(cfg,x);if(stops!=null){int[] ends={stops.x,stops.y,stops.sx,stops.sy};value=0;while(value<3&&x>=ends[value])value++;}
@@ -131,8 +133,8 @@ public final class DesktopLegacy extends DesktopEngine {
         if(key.equals(":full")){fullscreenRequested=!fullscreenRequested;return;}
         if(key.equals(":n")){toolbar=!toolbar;host().write(99,227,toolbar?1:0);return;}
         if(key.equals(":auto")){auto=!auto;toolbar=false;return;}
-        if(key.equals(":rapid")){toolbar=false;if(followsPc2Exe()){if((host().textWaiting||host().presentationWaiting)&&!host().ui.waiting)((PcHost)host()).skipButton=true;return;}rapid=!rapid;return;} // 423184: on, in text only; a right click stops it.
-        if(key.equals(":qsave")||key.equals(":qs")){writeSlot(followsPc2Exe()?0:1);if(followsPc2Exe())flash=200;toolbar=false;return;} // 423247 writes slot 0, then 41D980 flashes white.
+        if(key.equals(":rapid")){toolbar=false;if(followsExe()){if((host().textWaiting||host().presentationWaiting)&&!host().ui.waiting)((PcHost)host()).skipButton=true;return;}rapid=!rapid;return;} // 423184: on, in text only; a right click stops it.
+        if(key.equals(":qsave")||key.equals(":qs")){writeSlot(followsExe()?0:1);if(followsExe())flash=200;toolbar=false;return;} // 423247 writes slot 0, then 41D980 flashes white.
         if(key.equals(":qload")||key.equals(":ql")){if(Files.exists(slot(1)))readSlot(1);toolbar=false;return;}
         String script=key.equals(":backlog")?"LOG":key.equals(":torisetu")?"MANUAL":key.equals(":option")&&host() instanceof PcHost?"OPTION":key.equals(":menu")||key.equals(":option")?"ADVMENU":null;
         if(script!=null){requestSystem(script);return;}
@@ -141,7 +143,7 @@ public final class DesktopLegacy extends DesktopEngine {
     /** Input may arrive after ADVANCE releases a wait but before the next tick runs MES. */
     private void requestSystem(String action)throws IOException {
         if(session.inSystem())return;
-        auto=false;if(!followsPc2Exe())rapid=false;
+        auto=false;if(!followsExe())rapid=false;
         // No story toolbar exists during startup, movies or a title transition.
         if(host().body.isEmpty()&&!host().ui.waiting)return;
         if(pendingSystemAction==null)pendingSystemAction=action;
@@ -154,17 +156,18 @@ public final class DesktopLegacy extends DesktopEngine {
         // Resolve the released wait, but never advance a dialogue or complete media here.
         if(vm().run(1000)==MesVm.Status.FAULT)throw new IOException(vm().error());
         if(vm().scriptName().equalsIgnoreCase("MAIN")||vm().scriptName().equalsIgnoreCase("START")){pendingSystemAction=null;return false;}
-        boolean nativeHistory=pendingSystemAction.equals("@history"),fromChoice=nativeHistory&&followsPc2Exe()&&((PcHost)host()).choiceWaiting();
+        boolean nativeHistory=pendingSystemAction.equals("@history"),fromChoice=nativeHistory&&followsExe()&&((PcHost)host()).choiceWaiting();
         if(!host().textWaiting&&!fromChoice&&(nativeHistory||!host().ui.waiting))return false;
         String action=pendingSystemAction;pendingSystemAction=null;
         session.captureHistory();beginSystemAudio();
         if(nativeHistory){session.openNativeSystem();((PcHost)host()).openHistory(fromChoice);}
         else session.openSystem(action);
-        toolbar=auto=false;if(!followsPc2Exe())rapid=false;return true;
+        toolbar=auto=false;if(!followsExe())rapid=false;return true;
     }
-    /** The Mac app follows DC2PC.exe here. Other builds of the game have not been read, so they keep the shared path. */
+    /** The Mac app follows DC2PC.exe and the Vista D.C.P.C. here. Other builds have not been read, so they keep the shared path. */
     private boolean followsPc2Exe(){return PcHost.followsExe&&host() instanceof PcHost&&((PcHost)host()).second;}
-    @Override protected boolean keepsPointerAcrossRebuild(){return followsPc2Exe();}
+    private boolean followsExe(){return followsPc2Exe()||PcHost.followsExe&&host() instanceof PcHost&&((PcHost)host()).pc1;}
+    @Override protected boolean keepsPointerAcrossRebuild(){return followsExe();}
     /** 41D980, 422A53: nothing reaches the game during the white flash, or while a scene sets register 25. */
     private long flash;
     private boolean inputBlocked()throws IOException{return followsPc2Exe()&&(flash>0||host().read(99,25)!=0);}
@@ -172,12 +175,12 @@ public final class DesktopLegacy extends DesktopEngine {
     /** 40AF6F, 42207B: pressing during the typewriter completes the line at once. */
     @Override public void pointerDown(int x,int y)throws Exception{
         if(inputBlocked())return;
-        if(followsPc2Exe()){Dc2Host h=host();swallowRelease=h.presentationWaiting;if(swallowRelease)session.vm.signalHost(h.waitTicket(),MesVm.HostSignal.TEXT_COMPLETE);}
+        if(followsExe()){Dc2Host h=host();swallowRelease=h.presentationWaiting;if(swallowRelease)session.vm.signalHost(h.waitTicket(),MesVm.HostSignal.TEXT_COMPLETE);}
         super.pointerDown(x,y);
     }
     /** 40AD71: space hides the text window; 422FB3: any key brings it back. Enter presses what is under the pointer. */
     @Override public void keyPress(boolean space)throws Exception{
-        if(!followsPc2Exe()){super.keyPress(space);return;}
+        if(!followsExe()){super.keyPress(space);return;}
         Dc2Host h=host();PcHost p=(PcHost)h;
         if(inputBlocked())return;
         if(hidden){hidden=false;return;}
@@ -193,7 +196,7 @@ public final class DesktopLegacy extends DesktopEngine {
     }
     /** 40AC84, 413E40: up and down walk a choice, all four arrows walk a menu, skipping what cannot be selected. Page keys are the wheel. */
     @Override public void navKey(int code)throws Exception{
-        if(!followsPc2Exe()||inputBlocked()||hidden)return;
+        if(!followsExe()||inputBlocked()||hidden)return;
         PcHost h=(PcHost)host();
         if(code==KeyEvent.VK_PAGE_UP||code==KeyEvent.VK_PAGE_DOWN){scrollPc2(code==KeyEvent.VK_PAGE_UP?-1:1);return;}
         boolean back=code==KeyEvent.VK_UP||code==KeyEvent.VK_LEFT,step=back||code==KeyEvent.VK_DOWN||code==KeyEvent.VK_RIGHT;
@@ -225,6 +228,7 @@ public final class DesktopLegacy extends DesktopEngine {
     @Override public boolean takeRestored(){boolean was=restoredFlag;restoredFlag=false;return was;}
     /** 41B740: bit 15 inverts the variable test that hides a button. */
     private boolean hiddenButton(Dc2Ui.Button b)throws IOException{
+        if(!followsPc2Exe()&&host() instanceof PcHost&&((PcHost)host()).pc1&&PcHost.followsExe)return ((PcHost)host()).rapidOnly(b); // 40A770: Vista has no variable test here.
         if(b.binding==0)return false;
         int value=session.vm.variables.read((b.binding>>8)&127,b.binding&255);
         return (b.binding&0x8000)!=0?value!=0:value==0;
@@ -236,7 +240,7 @@ public final class DesktopLegacy extends DesktopEngine {
      * every frame while nothing plays. The same button under the pointer stays silent here.
      */
     private void hoverPc2(int x,int y)throws IOException{
-        PcHost h=(PcHost)host();pointerX=x;pointerY=y;
+        PcHost h=(PcHost)host();if(x!=pointerX||y!=pointerY)h.menuActivity();pointerX=x;pointerY=y;
         if(h.map.active&&h.map.selected<0){int was=h.map.hovered;h.map.hovered=-1;for(int n=0;n<h.map.regions().length;n++){int[] r=h.map.regions()[n];if(x>=r[0]&&x<r[2]&&y>=r[1]&&y<r[3])h.map.hovered=n;}if(h.map.hovered>=0&&h.map.hovered!=was)h.play(1,resources.named("sound",224),false);}
         if(timedInput()||(!h.ui.waiting&&!h.textWaiting))return;
         java.util.List<Dc2Ui.Button> all=buttons();int grids=h.gridWaiting?h.grid.size():0,plain=all.size()-grids,row=-1,hit=-1;
@@ -248,19 +252,19 @@ public final class DesktopLegacy extends DesktopEngine {
             if(row!=current){if(row>=0&&h.gridHoverSound!=255)h.play(1,resources.named("sound",h.gridHoverSound),false);h.write(99,253,row);}
         }
         for(int n=0;n<plain&&hit<0;n++){Dc2Ui.Button b=all.get(n);if((b.flags&2)==0&&!hiddenButton(b)&&x>b.left&&x<b.right&&y>b.top&&y<b.bottom)hit=n;}
-        if(hit>0&&all.get(hit).action.equals("*"))hit--;
+        if(hit>0&&h.second&&all.get(hit).action.equals("*"))hit--;
         String button=null;
-        if(hit>=0){Dc2Ui.Button b=all.get(hit);button=b.action+'@'+b.left+','+b.top+','+b.right+','+b.bottom;if(!button.equals(pointerButton)&&b.flags!=12&&b.hoverSound!=255)h.play(1,resources.named("sound",b.hoverSound),false);}
+        if(hit>=0){Dc2Ui.Button b=all.get(hit);button=b.action+'@'+b.left+','+b.top+','+b.right+','+b.bottom;if(!button.equals(pointerButton)&&b.flags!=12&&b.hoverSound!=255)h.play(1,resources.named("sound",b.hoverSound),false);if(!button.equals(pointerButton)&&!b.hoverVoice.isEmpty()&&h.read(99,15)!=0)h.playVoice(b.hoverVoice);} // 40A852, 40A879
         // 41176B: a four-step slider sounds on each step instead of on entry.
         int tier=-1;if(hit>=0&&all.get(hit).flags==12)for(Dc2Ui.Quad q:all.get(hit).sprites)if(q.state==7)tier=x<q.x?0:x<q.y?1:x<q.sx?2:3;
         if(tier>=0&&tier!=pointerTier&&all.get(hit).hoverSound!=255)h.play(1,resources.named("sound",all.get(hit).hoverSound),false);
         pointerTier=tier;pointerButton=button;hovered=hit>=0?hit:row>=0?plain+row:-1;
         if(h.ui.waiting){int own=hit<h.ui.buttons.size()?hit:-1;h.ui.hovered=own;if(own>=0)h.registers.put(245,own);}
     }
-    public void hover(int x,int y)throws IOException{if(followsPc2Exe()){if(flash<=0)hoverPc2(x,y);return;}int old=hovered;hovered=-1;java.util.List<Dc2Ui.Button> bs=buttons();for(int n=0;n<bs.size();n++){Dc2Ui.Button b=bs.get(n);if(x>=b.left&&x<b.right&&y>=b.top&&y<b.bottom)hovered=n;}if(host().ui.waiting)host().hoverMenu(hovered<host().ui.buttons.size()?hovered:-1);else if(old!=hovered&&hovered>=0&&bs.get(hovered).hoverSound!=255)host().play(1,resources.named("sound",bs.get(hovered).hoverSound),false);if(host() instanceof PcHost){Pc2Map m=((PcHost)host()).map;if(m.active&&m.selected<0){m.hovered=-1;for(int n=0;n<m.regions().length;n++){int[] r=m.regions()[n];if(x>=r[0]&&x<r[2]&&y>=r[1]&&y<r[3])m.hovered=n;}}}}
+    public void hover(int x,int y)throws IOException{if(followsExe()){if(flash<=0)hoverPc2(x,y);return;}int old=hovered;hovered=-1;java.util.List<Dc2Ui.Button> bs=buttons();for(int n=0;n<bs.size();n++){Dc2Ui.Button b=bs.get(n);if(x>=b.left&&x<b.right&&y>=b.top&&y<b.bottom)hovered=n;}if(host().ui.waiting)host().hoverMenu(hovered<host().ui.buttons.size()?hovered:-1);else if(old!=hovered&&hovered>=0&&bs.get(hovered).hoverSound!=255)host().play(1,resources.named("sound",bs.get(hovered).hoverSound),false);if(host() instanceof PcHost){Pc2Map m=((PcHost)host()).map;if(m.active&&m.selected<0){m.hovered=-1;for(int n=0;n<m.regions().length;n++){int[] r=m.regions()[n];if(x>=r[0]&&x<r[2]&&y>=r[1]&&y<r[3])m.hovered=n;}}}}
     public java.util.List<Control> controls(){java.util.List<Control> out=new ArrayList<>();for(Dc2Ui.Button b:buttons())if(!b.action.isEmpty())out.add(new Control(b.action,b.left,b.top,b.right,b.bottom));if(host() instanceof PcHost&&((PcHost)host()).nameInput.active){PcNameInput name=((PcHost)host()).nameInput;if(name.confirming)return out;for(int n=0;n<8;n++){int x=336+(n/4)*192+(n%4)*32;out.add(new Control("@name:field:"+n,x,40,x+32,72));}java.util.List<String> rows=name.visibleRows();for(int r=0;r<rows.size();r++)for(int c=0;c<Math.min(17,rows.get(r).length());c++){int x=280+c*24,y=96+r*24+(r>=4?8:0);if(rows.get(r).charAt(c)!='　')out.add(new Control("@name:char:"+(r*17+c),x,y,x+24,y+24));}}return out;}
     private int textSpeed()throws IOException{return host().read(99,host() instanceof PcHost?13:auto?27:26);}
-    private long textDuration()throws IOException{if(followsPc2Exe())return TextPlayback.duration(resources.profile.id,textSpeed(),PcText.layout(body(),0,0,40).ticks);return TextPlayback.duration(resources.profile.id,textSpeed(),body().codePointCount(0,body().length()));}
+    private long textDuration()throws IOException{if(followsExe())return TextPlayback.duration(resources.profile.id,textSpeed(),PcText.layout(body(),0,0,40).ticks);return TextPlayback.duration(resources.profile.id,textSpeed(),body().codePointCount(0,body().length()));}
     private long autoDelay()throws IOException{if(host() instanceof PcHost){int bytes=body().getBytes(codec.charset).length;return bytes*(host().read(99,13)==3?200L/3:100L);}return Math.max(100,20-host().read(99,29))*100L;}
     public String visibleBody()throws IOException{return body().substring(0,TextPlayback.visible(resources.profile.id,textSpeed(),body(),playbackMillis(),host().textRendered||!host().presentationWaiting));}
     public long playbackMillis(){return textTicket==ticket()?textClock:0;}
@@ -279,16 +283,24 @@ public final class DesktopLegacy extends DesktopEngine {
     public boolean audioActive(int ch){return host().audioActive[ch];}
     public void audioCompleted(int ch,int generation){host().audioCompleted(ch,generation);}
     public int pan(int ch){return ch==5?host().voicePan:0;}
-    public float volume(int ch)throws IOException{int enabled=ch==0?14:ch==5?5:15,level=ch==0?7:ch==5?9:8;if(host().read(99,enabled)==0)return 0;float gain=ch==0?host().musicFadeGain():ch==5?host().voiceGain():1;int l=host().read(99,level);if(followsPc2Exe())return l<=0?0:gain*(float)Math.pow(10,((2*l-60)*.83-(ch==0?3:0))/20); /* 4273A0, 429130 */return gain*Math.max(0,Math.min(1,l/30f));}
+    public float volume(int ch)throws IOException{int enabled=ch==0?14:ch==5?5:15,level=ch==0?7:ch==5?9:8;if(host().read(99,enabled)==0)return 0;float gain=ch==0?host().musicFadeGain():ch==5?host().voiceGain():1;int l=host().read(99,level);if(followsExe()&&!followsPc2Exe())return l<=0?0:gain*(float)Math.pow(10,Math.max(-30,l-30-(ch==0?3:0))/20.0); /* Vista 41C510: 1 dB a step */if(followsExe())return l<=0?0:gain*(float)Math.pow(10,((2*l-60)*.83-(ch==0?3:0))/20); /* 4273A0, 429130 */return gain*Math.max(0,Math.min(1,l/30f));}
     public byte[] snapshot()throws IOException{return session.storySnapshot();}
-    public void restore(byte[] bytes)throws IOException{cancelPointer();session.restore(bytes);host().ui.pressed=-1;savedAutoGeneration=host().autosaveGeneration;textTicket=-1;hidden=toolbar=auto=false;if(!followsPc2Exe())rapid=false;pendingSystemAction=null;scanSaves();restoredFlag=true;if(followsPc2Exe()){Dc2Host h=host();((PcHost)h).skipButton=false;h.play(5,"",false);if(!h.audioLoop[1])h.play(1,"",false);}} // 4203B0, 420566.
+    public void restore(byte[] bytes)throws IOException{cancelPointer();session.restore(bytes);host().ui.pressed=-1;savedAutoGeneration=host().autosaveGeneration;textTicket=-1;hidden=toolbar=auto=false;if(!followsExe())rapid=false;pendingSystemAction=null;scanSaves();restoredFlag=true;if(followsExe()){Dc2Host h=host();((PcHost)h).skipButton=false;h.play(5,"",false);if(!h.audioLoop[1])h.play(1,"",false);}} // 4203B0, 420566.
     private Path slot(int n)throws IOException{if(n<0||n>255)throw new IOException("Invalid save slot "+n);return saveDirectory.resolve("slot-"+n+".sav");}
     private void writeSlot(int n)throws IOException{save(slot(n));scanSaves();persist();}
     private void readSlot(int n)throws IOException{restore(slot(n));}
-    private void scanSaves()throws IOException{host().availableSaves.clear();host().saveLabels.clear();thumbnails.clear();for(int n=0;n<256;n++)if(Files.exists(slot(n))){host().availableSaves.add(n);long modified=Files.getLastModifiedTime(slot(n)).toMillis();host().saveLabels.put(n,followsPc2Exe()?saveDate(n,modified):new java.text.SimpleDateFormat("MM/dd HH:mm").format(new Date(modified)));scanThumbnail(n,slot(n));}}
+    private void scanSaves()throws IOException{host().availableSaves.clear();host().saveLabels.clear();thumbnails.clear();for(int n=0;n<256;n++)if(Files.exists(slot(n))){host().availableSaves.add(n);long modified=Files.getLastModifiedTime(slot(n)).toMillis();host().saveLabels.put(n,followsPc2Exe()?saveDate(n,modified):followsExe()?saveDateVista(n,modified):new java.text.SimpleDateFormat("MM/dd HH:mm").format(new Date(modified)));scanThumbnail(n,slot(n));}}
+    /** Vista 43329C */
+    private String saveDateVista(int n,long modified)throws IOException{DesktopSave meta=metadata(slot(n));Calendar c=Calendar.getInstance();c.setTimeInMillis(meta!=null&&meta.created>0?meta.created:modified);return String.format(Locale.ROOT,"【%2d/%2d %02d:%02d】",c.get(Calendar.MONTH)+1,c.get(Calendar.DAY_OF_MONTH),c.get(Calendar.HOUR_OF_DAY),c.get(Calendar.MINUTE));}
+    /** Vista 4049D0: a save is titled with the script's calendar, in full width digits. */
+    private String vistaCaption()throws IOException{
+        int month=session.vm.variables.read(9,0),day=session.vm.variables.read(9,1),week=session.vm.variables.read(9,2);if(month==0)return "";
+        return fullWidth(month)+"月"+fullWidth(day)+"日（"+"日月火水木金土".charAt(Math.floorMod(week,7))+"）";
+    }
+    private static String fullWidth(int n){StringBuilder b=new StringBuilder();for(char c:Integer.toString(n).toCharArray())b.append((char)('０'+c-'0'));return b.toString();}
     /** 0x4528C0 */
     private String saveDate(int n,long modified)throws IOException{DesktopSave meta=metadata(slot(n));Calendar c=Calendar.getInstance();c.setTimeInMillis(meta!=null&&meta.created>0?meta.created:modified);return String.format(Locale.ROOT,"%4d年%2d月%2d日 %2d時%2d分",c.get(Calendar.YEAR),c.get(Calendar.MONTH)+1,c.get(Calendar.DAY_OF_MONTH),c.get(Calendar.HOUR_OF_DAY),c.get(Calendar.MINUTE));}
-    public String saveCaption(){return followsPc2Exe()||host().checkpointLabel.isEmpty()?PcText.plain(body().isEmpty()?lastLine:body()):codec.apply(host().checkpointLabel);}
+    public String saveCaption(){if(followsExe()&&!followsPc2Exe())try{return vistaCaption();}catch(IOException e){return "";}return followsPc2Exe()||host().checkpointLabel.isEmpty()?PcText.plain(body().isEmpty()?lastLine:body()):codec.apply(host().checkpointLabel);}
     public BufferedImage preview()throws IOException{BufferedImage image=new BufferedImage(width,height,BufferedImage.TYPE_INT_RGB);Graphics2D g=image.createGraphics();try{scene(g,host().systemScene!=null?host().systemScene:host().scene.shown);}finally{g.dispose();}return image;}
     public void persist()throws IOException{if(audit)return;ByteArrayOutputStream b=new ByteArrayOutputStream();host().savePersistent(new DataOutputStream(b));atomic(saveDirectory.resolve("progress.dat"),b.toByteArray());}
     private Picture picture(String name)throws IOException {
@@ -317,7 +329,7 @@ public final class DesktopLegacy extends DesktopEngine {
     }
     private static int pcBaseline(int y,int size){return y+Math.round(size*.859f);}
     private void pcGlyph(Graphics2D g,String c,int x,int y,int size,Color fg,Color shade){g.setFont(pcFont(size));int base=pcBaseline(y,size);if(shade!=null){g.setColor(shade);g.drawString(c,x+1,base+1);}g.setColor(fg);g.drawString(c,x,base);}
-    private Color pcShade(int style){return (style&0x80)==0?null:new Color(color((style&63)==0?9:0),true);}
+    private Color pcShade(int style){return (style&0x80)==0?null:new Color(color(followsPc2Exe()&&(style&63)==0?9:0),true);}
     /** 41C5E0: base text first, ruby over it. 41C8A6: a ruby dot is a full size ・ pulled back to mark the character. */
     private void drawPcBody(Graphics2D g,String raw,int x,int y,int lineHeight,int style)throws IOException{
         PcText.Layout l=PcText.layout(raw,x,y,lineHeight);Dc2Host h=host();
@@ -331,18 +343,19 @@ public final class DesktopLegacy extends DesktopEngine {
     /** 41F7D0: 24 px cells centred on the name plate, whose template carries the centre in its zero width entry. */
     private void drawPcName(Graphics2D g,String name,Dc2Ui.Quad plate,java.util.List<Dc2Ui.Quad> template)throws IOException{
         int cells=0;for(Dc2Ui.Quad q:template)if(q.type==2&&q.width==0)cells=q.y;
-        String line=PcText.plain(name).replace("\n","");int bytes=line.getBytes(Binary.SJIS).length,x=plate.x+12*cells-6*bytes;
+        int size=followsPc2Exe()?24:28,cell=size/2; // Vista 417F20 uses 28 px.
+        String line=PcText.plain(name).replace("\n","");int bytes=line.getBytes(Binary.SJIS).length,x=plate.x+cell*cells-cell/2*bytes;
         Color fg=new Color(color(plate.height),true),shade=pcShade(plate.height);
-        for(int pos=0;pos<line.length();){int cp=line.codePointAt(pos);String c=new String(Character.toChars(cp));pos+=c.length();pcGlyph(g,c,x,plate.y,24,fg,shade);x+=c.getBytes(Binary.SJIS).length*12;}
+        for(int pos=0;pos<line.length();){int cp=line.codePointAt(pos);String c=new String(Character.toChars(cp));pos+=c.length();pcGlyph(g,c,x,plate.y,size,fg,shade);x+=c.getBytes(Binary.SJIS).length*cell;}
     }
     /** 41D3F0, 41CC80: labels use the same cells, half width for single byte characters, and 3:30, 3:31 choose the size. */
     private void drawPcLabel(Graphics2D g,String s,int x,int y,int style)throws IOException{
-        int size=host().variables.read(3,30)!=0?(s.getBytes(Binary.SJIS).length>20?14:16):host().variables.read(3,31)!=0?16:PcText.BODY_SIZE,at=x,line=y;
+        int size=!followsPc2Exe()?PcText.BODY_SIZE:host().variables.read(3,30)!=0?(s.getBytes(Binary.SJIS).length>20?14:16):host().variables.read(3,31)!=0?16:PcText.BODY_SIZE,at=x,line=y;
         Color fg=new Color(color(style),true),shade=pcShade(style);
         String plain=PcText.plain(s);for(int pos=0;pos<plain.length();){int cp=plain.codePointAt(pos);String c=new String(Character.toChars(cp));pos+=c.length();if(cp=='\n'){at=x;line+=size+4;continue;}pcGlyph(g,c,at,line,size,fg,shade);at+=c.getBytes(Binary.SJIS).length==1?size/2:size;}
     }
     private void text(Graphics2D g,String s,int x,int y,int lineHeight,int style,int width)throws IOException{
-        if(followsPc2Exe()){drawPcLabel(g,s,x,y,style);return;}
+        if(followsExe()){drawPcLabel(g,s,x,y,style);return;}
         g.setFont(new Font("Microsoft YaHei",Font.PLAIN,22));Color foreground=new Color(color(style),true);
         // PC1 417A5E / PC2 421CA6 / DM 4024E8 draw style 0x80 at (+1,+1), using palette 0; PC2 uses 9 for black text.
         boolean shadow=(style&0x80)!=0;Color shade=shadow?new Color(color(host() instanceof PcHost&&((PcHost)host()).second&&(style&63)==0?9:0),true):foreground;
@@ -359,7 +372,7 @@ public final class DesktopLegacy extends DesktopEngine {
         // background every frame, so the copy is a no-op — drawing it over the panel quad that was
         // laid down before the buttons would punch a background hole through the panel's left edge.
         if(q.type==0&&q.slot()==1&&q.sx==q.x&&q.sy==q.y)return;
-        Composite old=g.getComposite();if(q.opaque()){float alpha=80/255f;if(followsPc2Exe())alpha=host().read(99,10)!=0?Math.max(0,Math.min(1,host().read(99,11)/16f)):1;g.setComposite(AlphaComposite.SrcOver.derive(alpha));} /* 40D030 */
+        Composite old=g.getComposite();if(q.opaque()){float alpha=80/255f;if(followsExe())alpha=host().read(99,10)!=0?Math.max(0,Math.min(1,host().read(99,11)/16f)):1;g.setComposite(AlphaComposite.SrcOver.derive(alpha));} /* 40D030 */
         if(q.type==1){g.setColor(new Color(color(q.flags),true));g.fillRect(q.x,q.y,q.width,q.height);}
         else if(q.type==0){Picture p=picture(q.text.isEmpty()?slots[q.slot()]:q.text);if(p!=null){int sx=q.sx,sy=q.sy;if(q.animation!=0&&q.frames>0&&q.period>0)sx+=(int)(host().scene.effectClock/(34L*q.period)%q.frames)*q.step;int l=Math.max(0,sx),t=Math.max(0,sy),r=Math.min(p.image.getWidth(),sx+q.width),b=Math.min(p.image.getHeight(),sy+q.height);if(l<r&&t<b)g.drawImage(p.image,q.x+l-sx,q.y+t-sy,q.x+r-sx,q.y+b-sy,l,t,r,b,null);}}
         else throw new IOException("Desktop draw type pending: "+q.type);
@@ -373,7 +386,7 @@ public final class DesktopLegacy extends DesktopEngine {
         at(g,f.slots[1],DesktopMac.ACTIVE?f.x:-f.x,DesktopMac.ACTIVE?f.y:-f.y);
         boolean pc2=resources.profileId.equals("dc2pc-5769");
         // PC2 41A950 visits actor slots 0..3, so a later close-up covers earlier actors.
-        for(int order=0;order<4;order++){int n=pc2?order:3-order;int[] a=f.actors[n];if(captureState==null&&f==host().scene.shown&&followsPc2Exe())a=host().scene.presented(n,a);for(int slot:new int[]{n+2,n+6}){String name=slot==n+6?resources.characterOverlay(f.slots[n+2],f.slots[slot]):f.slots[slot];Picture p=picture(name);if(p==null)continue;
+        for(int order=0;order<4;order++){int n=pc2?order:3-order;int[] a=f.actors[n];if(captureState==null&&f==host().scene.shown&&followsExe())a=host().scene.presented(n,a);for(int slot:new int[]{n+2,n+6}){String name=slot==n+6?resources.characterOverlay(f.slots[n+2],f.slots[slot]):f.slots[slot];Picture p=picture(name);if(p==null)continue;
             if(pc2){PcActorLayout r=PcActorLayout.dc2pc(a,p.raw.width,p.raw.height);g.drawImage(p.image,r.x,r.y,r.x+r.width,r.y+r.height,0,0,p.raw.width,p.raw.height,null);}
             else{AffineTransform tr=g.getTransform();g.translate(a[0]+a[3],a[1]+a[4]);g.scale(a[2]/100.0,a[2]/100.0);g.drawImage(p.image,p.raw.x-a[3],p.raw.y-a[4],null);g.setTransform(tr);}
         }}
@@ -390,7 +403,7 @@ public final class DesktopLegacy extends DesktopEngine {
     private boolean particlesOn()throws IOException{Dc2Scene s=host().scene;return host().effectsEnabled()&&!s.effectsFrozen&&(s.particleKind!=0||s.overlayKind==7);}
     public BufferedImage render()throws IOException {
         BufferedImage result=new BufferedImage(width,height,BufferedImage.TYPE_INT_ARGB);Graphics2D g=result.createGraphics();try{
-            g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,RenderingHints.VALUE_TEXT_ANTIALIAS_ON);Dc2Host h=host();boolean exe=followsPc2Exe();
+            g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,RenderingHints.VALUE_TEXT_ANTIALIAS_ON);Dc2Host h=host();boolean exe=followsExe();
             if(exe&&flash>0){g.setColor(new Color(color(7),true));g.fillRect(0,0,width,height);return result;} // 41D980
             // 4210C9: every effect starts from what was on the screen, text window included.
             if(exe&&h.scene.transitionSerial!=seenSerial){seenSerial=h.scene.transitionSerial;if(h.scene.transitionRemaining>0){fadeFrom=lastFrame;fadeFromSerial=seenSerial;}}
@@ -430,13 +443,13 @@ public final class DesktopLegacy extends DesktopEngine {
             if(!h.body.isEmpty()&&!hidden){
                 Dc2Ui.Quad body=null,name=null;for(Dc2Ui.Quad q:h.ui.quadTemplates.get(h.messageMode==0?1:4)){quad(g,q,h.scene.slots,false);if(q.type==2&&q.width>2)body=q;}
                 if(!h.speaker.isEmpty())for(Dc2Ui.Quad q:h.ui.quadTemplates.get(h.messageMode==0?2:5)){quad(g,q,h.scene.slots,false);if(q.type==2&&q.width>2)name=q;}
-                boolean pc2=followsPc2Exe();
+                boolean pc2=followsExe();
                 if(name!=null){if(pc2)drawPcName(g,h.speaker,name,h.ui.quadTemplates.get(2));else text(g,h.speaker,name.x,name.y,name.width,name.height,700);}
                 if(body!=null){if(pc2){int style=body.height;if(h.history.active)for(Dc2Ui.Quad q:h.ui.quadTemplates.get(1))if(q.type==2&&q.width==0)style=q.x; /* 41FA3A */drawPcBody(g,h.body,body.x,body.y,body.width,style);}else text(g,visibleBody(),body.x,body.y,body.width,body.height,width-40-body.x);}
                 for(int n=18;n<=19;n++)at(g,h.scene.shown.slots[n],h.scene.portraitX,h.scene.portraitY);
             }
             if(h instanceof PcHost&&((PcHost)h).nameInput.active)drawName(g,((PcHost)h).nameInput);
-            java.util.List<Dc2Ui.Button> bs=buttons();for(int n=0;n<bs.size();n++){Dc2Ui.Button b=bs.get(n);boolean slider=false;for(Dc2Ui.Quad q:b.sprites)if(q.state==5)slider=true;for(Dc2Ui.Quad q:b.sprites)if(q.state==0||q.state==99||(q.state==1&&n==hovered)||(q.state==2&&!slider&&(b.action.equals(":c")?h.confirmationChecked():n==pressedButton)))quad(g,q,h.scene.slots,true);}
+            java.util.List<Dc2Ui.Button> bs=buttons();for(int n=0;n<bs.size();n++){Dc2Ui.Button b=bs.get(n);boolean slider=false;for(Dc2Ui.Quad q:b.sprites)if(q.state==5)slider=true;boolean vista=followsExe()&&!followsPc2Exe();if(vista&&hiddenButton(b))continue;for(Dc2Ui.Quad q:b.sprites)if(q.state==0||q.state==99||(q.state==1&&n==hovered&&!(vista&&pressedButton>=0))||(vista&&q.state==3&&n==hovered&&pressedButton<0)||(vista&&(q.state==2||q.state==4)&&n==hovered&&pressedButton>=0)||(!vista&&q.state==2&&!slider&&(b.action.equals(":c")?h.confirmationChecked():n==pressedButton)))quad(g,q,h.scene.slots,true);} // Vista 40A221
             for(Dc2Ui.Button b:bs)drawSlider(g,b);
             if(h.gridWaiting)drawGrid(g);
             if(h.history.active&&!(h instanceof PcHost))drawHistory(g);
@@ -473,8 +486,8 @@ public final class DesktopLegacy extends DesktopEngine {
         Dc2Scene s=host().scene;if(s.transitionRemaining<=0||s.transitionDuration<=0)return;
         if(s.transitionKind==221||s.transitionKind==222){float p=s.transitionRemaining/(float)s.transitionDuration;g.setColor(new Color(0f,0f,0f,s.transitionKind==221?p:1-p));g.fillRect(0,0,width,height);return;}
         BufferedImage old=new BufferedImage(width,height,BufferedImage.TYPE_INT_ARGB);Graphics2D prev=old.createGraphics();if(fadeFrom!=null&&fadeFromSerial==s.transitionSerial)prev.drawImage(fadeFrom,0,0,null);else scene(prev,s.previous);prev.dispose();
-        if(followsPc2Exe()&&s.transitionKind==2){g.drawImage(old,0,0,null);g.setColor(new Color(0f,0f,0f,1-s.transitionRemaining/(float)s.transitionDuration));g.fillRect(0,0,width,height);return;} // 4210C9
-        if(followsPc2Exe()&&s.transitionKind>=140&&s.transitionKind<=150){drawShatter(g,old,s);return;}
+        if(followsExe()&&s.transitionKind==2){g.drawImage(old,0,0,null);g.setColor(new Color(0f,0f,0f,1-s.transitionRemaining/(float)s.transitionDuration));g.fillRect(0,0,width,height);return;} // 4210C9
+        if(followsExe()&&s.transitionKind>=140&&s.transitionKind<=150){drawShatter(g,old,s);return;}
         if(s.transitionKind>=130&&s.transitionKind<=132){int variant=s.transitionKind-130,ticks=(int)((s.transitionDuration-s.transitionRemaining)/40),gain=0;if(followsPc2Exe())gain=((PcHost)host()).maskGain(ticks);else for(int n=2;n<=ticks;n++)gain+=Math.min(16,n);boolean second=((PcHost)host()).second;
             int[] pixels=old.getRGB(0,0,width,height,null,0,width);for(int y=0;y<height;y++)for(int x=0;x<width;x++){int v=variant==0?0:(second?8:0)-x/4-(variant==2?y/4:0);int alpha=255-255*Math.max(0,Math.min(16,v+gain))/16;int i=y*width+x;pixels[i]=(pixels[i]&0xffffff)|(alpha<<24);}old.setRGB(0,0,width,height,pixels,0,width);
         }else g.setComposite(AlphaComposite.SrcOver.derive(s.transitionRemaining/(float)s.transitionDuration));
@@ -535,6 +548,13 @@ public final class DesktopLegacy extends DesktopEngine {
         }g.setTransform(old);}return;}
         Picture p=picture(h.scene.slots[10]);if(p==null)return;
         for(int n=0;n<h.grid.size();n++){Dc2Ui.Button b=h.grid.get(n);int slot=h.gridSlot(n),sx=hovered==h.ui.buttons.size()+n?288:0;
+            if(followsExe()&&!h.second){ // Vista 404BD0
+                boolean lit=hovered==h.ui.buttons.size()+n&&!(slot<2&&h.saveGrid);g.drawImage(p.image,b.left,b.top,b.right,b.bottom,0,lit?72:0,288,(lit?72:0)+72,null);
+                DesktopSave row=metadata(slot(slot));if(row==null)continue;
+                if(slot<2){String tag=slot==0?"自動":"最新";pcCells(g,tag,b.left+9,b.top+9,22,color(0));pcCells(g,tag,b.left+8,b.top+8,22,color(7));}
+                else if(row.icon>=0&&row.icon<18)chip(g,11,row.icon%6*56,row.icon/6*56,56,56,b.left+8,b.top+8);
+                Shape clip=g.getClip();g.clipRect(b.left,b.top,b.right-b.left,b.bottom-b.top);pcCells(g,row.caption,b.left+64,b.top+6,28,color(7));String when=h.saveLabels.get(slot);if(when!=null)pcCells(g,when,b.left+104,b.top+42,22,color(7));g.setClip(clip);continue;
+            }
             int sy=h.second?(slot==0?0:slot==1?(h.saveGrid?72:216):144):(h.saveGrid?0:72);
             if(!h.second&&slot<2)sx=0;
             g.drawImage(p.image,b.left,b.top,b.right,b.bottom,sx,sy,sx+288,sy+72,null);
@@ -547,6 +567,10 @@ public final class DesktopLegacy extends DesktopEngine {
             if(meta!=null&&!meta.caption.isEmpty()){Shape clip=g.getClip();g.clipRect(b.left+64,b.top,224,42);roomText(g,meta.caption,b.left+(h.second?72:64),b.top+(h.second?10:6),216,18,0xffffffff);g.setClip(clip);}
         }
     }
+    private void pcCells(Graphics2D g,String s,int x,int y,int size,int color){
+        Color fg=new Color(color,true);int at=x;
+        for(int pos=0;pos<s.length();){int cp=s.codePointAt(pos);String c=new String(Character.toChars(cp));pos+=c.length();pcGlyph(g,c,at,y,size,fg,null);at+=c.getBytes(Binary.SJIS).length==1?size/2:size;}
+    }
     private void pcRowText(Graphics2D g,String s,int x,int y)throws IOException{
         Color fg=new Color(color(9),true),shade=new Color(color(0),true);int at=x;
         for(int pos=0;pos<s.length();){int cp=s.codePointAt(pos);String c=new String(Character.toChars(cp));pos+=c.length();pcGlyph(g,c,at+1,y+1,16,shade,null);pcGlyph(g,c,at,y,16,fg,null);at+=c.getBytes(Binary.SJIS).length==1?8:16;}
@@ -554,7 +578,7 @@ public final class DesktopLegacy extends DesktopEngine {
     /** 407DD6..40814E uses palette 7 for an eight-neighbour outline and palette 14 for the text. */
     private void pcSceneText(Graphics2D g,String value,int rawLength,int x,int y,int width)throws IOException{int size=host().variables.read(3,30)!=0?(rawLength>20?14:16):host().variables.read(3,31)!=0?16:28;for(int dy=-1;dy<=1;dy++)for(int dx=-1;dx<=1;dx++)if(dx!=0||dy!=0)roomText(g,value,x+dx,y+dy,width,size,color(7));roomText(g,value,x,y,width,size,color(14));}
     private void chip(Graphics2D g,int slot,int sx,int sy,int w,int h,int x,int y)throws IOException{Picture p=picture(host().scene.slots[slot]);if(p!=null)g.drawImage(p.image,x,y,x+w,y+h,sx,sy,sx+w,sy+h,null);}
-    private void roomText(Graphics2D g,String value,int x,int y,int w,int size,int color){g.setFont(followsPc2Exe()?pcFont(size):new Font("Microsoft YaHei",Font.PLAIN,size));g.setColor(new Color(color,true));int at=x,base=y+size;for(char ch:value.toCharArray()){int cw=g.getFontMetrics().charWidth(ch);if(ch=='\n'||at+cw>x+w){at=x;base+=size+4;if(ch=='\n')continue;}g.drawString(String.valueOf(ch),at,base);at+=cw;}}
+    private void roomText(Graphics2D g,String value,int x,int y,int w,int size,int color){g.setFont(followsExe()?pcFont(size):new Font("Microsoft YaHei",Font.PLAIN,size));g.setColor(new Color(color,true));int at=x,base=y+size;for(char ch:value.toCharArray()){int cw=g.getFontMetrics().charWidth(ch);if(ch=='\n'||at+cw>x+w){at=x;base+=size+4;if(ch=='\n')continue;}g.drawString(String.valueOf(ch),at,base);at+=cw;}}
     private void drawHistory(Graphics2D g)throws IOException{
         Dc2History h=host().history;for(int row=0;row<4&&row+h.cursor<h.entries.size();row++){int index=row+h.cursor,y=25+row*133;Dc2History.Entry e=h.entries.get(index);chip(g,10,228,0,680,124,200,y-4);Shape clip=g.getClip();g.clipRect(200,y-4,680,124);
             Integer face=nativeData==null?null:nativeData.faces.get(e.speaker);if(face!=null)chip(g,10,face==24?864:168+(face%6)*116,face==24?480:132+(face/6)*116,116,116,240,y);else roomText(g,e.speaker,212,y+12,135,20,0xff9a386d);

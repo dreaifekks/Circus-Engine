@@ -52,7 +52,7 @@ public final class NativeProgress {
     }
     public static boolean storySlot(String id,String source,String path)throws IOException{
         layout(id);String parent=source.substring(0,source.lastIndexOf('/')+1).toLowerCase(Locale.ROOT),p=path.toLowerCase(Locale.ROOT);
-        String prefix=id.equals("dcpc-2063")?"dcpc":id.equals("dc2-3363")?"dc2":id.equals("dc2pc-5769")?"dc2pc":id.equals("dc2dm-9d72")?"dc2dm":id.equals("dc3wy-a09f")?"dc3wy":id.equals("dc3pp-9872")?"dc3pp":"dc3dd";
+        String prefix=id.equals("dcpc-2063")?"dcpcv?":id.equals("dc2-3363")?"dc2":id.equals("dc2pc-5769")?"dc2pc":id.equals("dc2dm-9d72")?"dc2dm":id.equals("dc3wy-a09f")?"dc3wy":id.equals("dc3pp-9872")?"dc3pp":"dc3dd";
         return p.startsWith(parent)&&p.substring(parent.length()).matches(prefix+"[0-9]+\\.dat");
     }
     public static final class Summary {
