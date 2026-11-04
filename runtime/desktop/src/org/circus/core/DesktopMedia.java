@@ -24,6 +24,7 @@ public final class DesktopMedia implements AutoCloseable {
     private final AtomicLongArray request=new AtomicLongArray(6);
     private final AtomicReferenceArray<Loaded> ready=new AtomicReferenceArray<>(6);
     private final AtomicReference<Exception> failure=new AtomicReference<>();
+    private final java.util.concurrent.atomic.AtomicInteger missing=new java.util.concurrent.atomic.AtomicInteger(-1);
     private final DesktopMixer.Track[] tracks=new DesktopMixer.Track[6];private DesktopMixer.Track olderEffect,loopEffect;private final String[] names=new String[6];
     private static final class Loaded {final long id;final DesktopMixer.Track track;Loaded(long id,DesktopMixer.Track track){this.id=id;this.track=track;}}
     public DesktopMedia(DesktopEngine e){engine=e;}
@@ -50,7 +51,8 @@ public final class DesktopMedia implements AutoCloseable {
                 DesktopMixer.Track track=audio.codec.equals("ogg")?new DesktopMixer.Track(pcm,44100,2,16,loop):new DesktopMixer.Track(pcm,audio.sampleRate,audio.channels,audio.bits,loop);
                 track.volume(volume,pan);track.startAtVolume();if(resume>0)track.seekMicros(resume);
                 DesktopMixer.shared().play(track);publish(ch,new Loaded(id,track));
-            }catch(Exception e){if(request.get(ch)==id)failure.compareAndSet(null,e);}
+            }catch(java.io.FileNotFoundException e){if(PcHost.followsExe&&request.get(ch)==id)missing.set(ch);else if(request.get(ch)==id)failure.compareAndSet(null,e);} // A sound the install lacks is silence, not the end of the game.
+            catch(Exception e){if(request.get(ch)==id)failure.compareAndSet(null,e);}
         });
     }
     /** Loaders can finish out of order: the newest request stays, and the other track must not keep playing. */
@@ -107,6 +109,7 @@ public final class DesktopMedia implements AutoCloseable {
         try{byte[] pcm=Binary.read(p.getInputStream(),128*1024*1024);int exit=p.waitFor();input.join();if(exit!=0||error[0]!=null)throw new IOException("Ogg decoder failed ("+exit+")",error[0]);return pcm;}finally{p.destroy();}
     }
     public void sync()throws Exception{
+        int absent=missing.getAndSet(-1);if(absent>=0)engine.audioCompleted(absent,engine.audioGeneration(absent));
         Exception failed=failure.getAndSet(null);if(failed==null&&background)failed=DesktopMixer.shared().failure();if(failed!=null)throw new IOException("Audio playback failed",failed);
         for(int ch=0;ch<6;ch++){
             if(background){syncTrack(ch);continue;}

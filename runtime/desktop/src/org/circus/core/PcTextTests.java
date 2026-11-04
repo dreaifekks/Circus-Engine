@@ -28,6 +28,22 @@ public final class PcTextTests {
         l=PcText.layout("｛あ",44,462,40);
         check(at(l,"｛").x==44&&at(l,"あ").x==72,"An unclosed marker draws as text");
         check(PcText.plain("何故か｛おとねえ／音姉｝と").equals("何故か音姉と"),"Captions keep the base text");
+        // DC2DM: 21 px cells, half width 10, ruby 12 px high up, and lines holding ruby drop.
+        l=PcText.layout("｛かな／漢字｝a\nい",312,456,32,PcText.DM);
+        check(at(l,"漢").y==462&&at(l,"か").y==450&&at(l,"い").y==494,"DM lines with ruby drop by 6");
+        check(at(l,"a").x==312+42,"DM full width cells are 21 px");
+        l=PcText.layout("a｛かな／字｝\n｛か／字｝い",312,456,32,PcText.DM);
+        check(at(l,"い").y==456+6+32+10,"Later ruby lines drop 10 more");
+        // D.D. 43CC50: kana are centred in equal cells over 22 px base characters.
+        l=PcText.layout("｛さき／咲姫｝",100,0,34,PcText.DC3);
+        check(at(l,"さ").x==100+4&&at(l,"き").x==100+22+4&&at(l,"さ").y==-10,"D.D. ruby is centred in its cells");
+        l=PcText.layout("あ｛あいうえ／字｝",100,0,34,PcText.DC3);
+        check(at(l,"あ").size==22&&at(l,"い").x==100+22-17+14,"Wide D.D. ruby moves left by half its overflow");
+        check(at(PcText.layout("あ\nい",0,0,34,PcText.DC3),"い").line==1,"Glyphs know their line");
+        try{
+            check(NativeText.expandRubyDots("あ｛・／甘味｝い").equals("あ｛・・／甘味｝い"),"One dot per double byte base character");
+            check(NativeText.expandRubyDots("｛かな／漢字｝").equals("｛かな／漢字｝"),"Ordinary ruby is left alone");
+        }catch(java.io.IOException e){throw new AssertionError(e);}
         System.out.println("PcText "+checks+" checks PASS");
     }
 }

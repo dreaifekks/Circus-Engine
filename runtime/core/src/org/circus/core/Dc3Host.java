@@ -65,7 +65,7 @@ public final class Dc3Host implements MesVm.ContextHost,MesVm.ChoiceHost,MesVm.T
     /** wait.message - the opcode that closes a line of dialogue. */
     public static int waitMessageOpcode(String id){return id.equals("dc3pp-9872")?0x07:0x06;}
     public Dc3Layout layout(){return scene.layout;}
-    public Dc3Host(CircusResources resources,TextCodec codec,boolean originalSystem){if(resources!=null&&!supports(resources.profile.id))throw new IllegalArgumentException("DD host cannot execute "+resources.profile.id);this.resources=resources;gallery=new Dc3Gallery(resources);this.originalSystem=originalSystem;state=new Dc3State(originalSystem);dialogue=new DialogueHost(codec);dialogue.familyName="朝倉";dialogue.givenName="清隆";if(resources!=null)scene.layout=Dc3Layout.of(resources.profile.id);dialogue.spreadRubyDots=PcHost.followsExe&&!followsPp();if(followsPp())defaultsPp();ui.keepsPanels=PcHost.followsExe&&!followsPp();if(PcHost.followsExe)history.limit=400;} // 403EE4
+    public Dc3Host(CircusResources resources,TextCodec codec,boolean originalSystem){if(resources!=null&&!supports(resources.profile.id))throw new IllegalArgumentException("DD host cannot execute "+resources.profile.id);this.resources=resources;gallery=new Dc3Gallery(resources);this.originalSystem=originalSystem;state=new Dc3State(originalSystem);dialogue=new DialogueHost(codec);dialogue.familyName="朝倉";dialogue.givenName="清隆";if(resources!=null)scene.layout=Dc3Layout.of(resources.profile.id);dialogue.spreadRubyDots=PcHost.followsExe&&!followsPp();if(followsPp())defaultsPp();ui.keepsPanels=PcHost.followsExe&&!followsPp();if(followsWy())musicRoom.useTracks(Dc3Music.WY_TRACKS);if(PcHost.followsExe)history.limit=400;} // 403EE4
     /** The Mac app follows the exes. P.P. is a different engine from D.D. and W.Y.: DirectDraw and DC2PC's habits. */
     public boolean followsPp(){return PcHost.followsExe&&resources!=null&&resources.profile.id.equals("dc3pp-9872");}
     private boolean followsWy(){return PcHost.followsExe&&resources!=null&&resources.profile.id.equals("dc3wy-a09f");}
@@ -294,7 +294,7 @@ public final class Dc3Host implements MesVm.ContextHost,MesVm.ChoiceHost,MesVm.T
         case "checkpoint":checkpoint=a[0];checkpointMetadata=a[1];variables.appendHistory();return true;
         case "history.range":require(originalSystem||a[0]==1&&a[1]==0,"history.range mode");variables.appendHistory();return true;
         case "scene.checkpoint":checkpointLabel=text(bytes);variables.appendHistory();return true;
-        case "dd.audio.seek":require(a[0]==0,"audio seek channel "+a[0]);musicRoom.seek=Math.max(0,Math.min(100,state.read(99,187)+1));musicRoom.seekGeneration++;return true;
+        case "dd.audio.seek":if(PcHost.followsExe&&a[0]!=0)return true;require(a[0]==0,"audio seek channel "+a[0]);musicRoom.seek=Math.max(0,Math.min(100,state.read(99,187)+1));musicRoom.seekGeneration++;return true;
         case "system.command":
             if(originalSystem&&PcHost.followsExe&&a[0]==215)return true; // Past the end of every native switch: 40A3F9, 408F49, 412A36.
             if(originalSystem&&followsPp()&&systemPp(a))return true;
@@ -311,6 +311,7 @@ public final class Dc3Host implements MesVm.ContextHost,MesVm.ChoiceHost,MesVm.T
                 return true;
             }
             if(originalSystem&&a[0]==6){ui.saveGrid=a[1]==0;return true;}
+            if(originalSystem&&PcHost.followsExe&&a[0]==7)return true; // LOG.mes only; the log is native here.
             if(originalSystem&&a[0]==20)return true; // 40A70F: release thumbnail resources; none are allocated by this host yet.
             if(originalSystem&&a[0]==19&&a[1]==0){variables.write(9,87,availableSaves.contains(state.read(99,254))?0:1);return true;}if(a[0]==9&&a[1]==0){publish();credits.start(resources,variables.read(5,10),state.read(100,110)!=0);nextTicket();return true;}require(a[0]==207&&a[1]==0,"system.command "+Arrays.toString(a));return true; // native switch default at 40B0E9
         case "native.no_effect":return true; // Shared native fallback, not an unknown-op policy.
@@ -324,6 +325,7 @@ public final class Dc3Host implements MesVm.ContextHost,MesVm.ChoiceHost,MesVm.T
             case 27:windowSizeReset=true;return true;
             case 10:require(originalSystem,"original media availability check");resources.scripts().script("START");return true;
             case 15:require(originalSystem,"input mode reset");ui.inputMode=a[1];state.write(99,195,0);return true;
+            case 22:case 23:case 24:case 25:if(PcHost.followsExe){state.write(99,204,0);return true;} // SAVE.mes wsave/wload: exporting a save through a file dialog. Treated as cancelled.
             case 1:case 9:return true;
             case 4:if(a[1]==0){saveRequest=state.read(99,254);nextTicket();}else autosaveGeneration++;return true;
             case 18:return true; // The portable session already retained display and execution state.
@@ -381,7 +383,7 @@ public final class Dc3Host implements MesVm.ContextHost,MesVm.ChoiceHost,MesVm.T
         case "scene.background_move":if(a[2]==1){scene.stop(1);scene.slots[1].x=a[0];scene.slots[1].y=a[1];return true;}scene.move(1,a[0],a[1],scene.slots[1].alpha,a[2]==0?2000:a[2]==99?a[3]*200L:(a[3]+4)*250L);return true;
         case "scene.transition":{
             if(a[0]==9){publish();UiCapture next=SceneCaptures.dd(scene.capture(),SceneCaptures.ddPanel(ui,variables),ui.palette,uiCapture);uiCapture=captureRenderer==null?next:captureRenderer.flatten(next);scene.slots[0].resource="@ui-capture";return true;}
-            int mode=a[0];if(mode==32||mode==7||mode==10||mode==11||mode==13||mode==14||mode==23||mode==24||mode==25||mode==30||mode==31)return true;
+            int mode=a[0];if(PcHost.followsExe&&mode==8)return true; /* LOG.mes only */if(mode==32||mode==7||mode==10||mode==11||mode==13||mode==14||mode==23||mode==24||mode==25||mode==30||mode==31)return true;
             if(mode==51||mode==52){for(int i=0;i<(mode==51?4:5);i++)if((a[1]&(1<<i))!=0)scene.shake(i+scene.layout.spriteFirst,mode==51?0:1);return true;}
             if(mode==4||mode==6){for(int i=0;i<43;i++)scene.shake(i,mode==4?0:1);return true;}
             require(mode==0||mode==1||mode==2||mode==3||mode==5||mode==16||mode==17||mode==20||mode==21,"transition mode "+mode);
@@ -404,6 +406,7 @@ public final class Dc3Host implements MesVm.ContextHost,MesVm.ChoiceHost,MesVm.T
             if(a[0]==1||a[0]==3||a[0]==9||a[0]==11){scene.petals.start(a[0],a[1]);return true;}
             if(a[0]==16){scene.clouds=a[1]!=0;scene.environmentTime=0;return true;}
             if(a[0]==0){scene.petals.start(0);scene.fog=false;scene.clouds=false;return true;}
+            if(PcHost.followsExe&&a[0]!=7)return true; // W.Y. uses effect 2 six times; not reproduced.
             require(a[0]==7,"scene effect "+a[0]);scene.fog=a[1]!=0;if(!scene.fog)scene.pending[scene.layout.fog]="-";scene.revision++;return true;
         case "audio.music":{
             if(a[0]==255){pendingAudio[0]="";musicId=-1;return true;}
