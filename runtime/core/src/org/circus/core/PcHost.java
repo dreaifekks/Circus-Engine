@@ -12,7 +12,7 @@ public final class PcHost extends Dc2Host {
     /** Set by the Mac app, where the DC2PC input path follows the exe. */
     public static boolean followsExe;
     /** Ctrl as a physical key, and the toolbar's skip button. 41B110: register 25 forces normal speed over both. */
-    public boolean ctrlHeld,skipButton;
+    public boolean skipButton;
     public boolean fast()throws IOException{return (pc1||read(99,25)==0)&&(ctrlHeld||skipButton);}
     /** 41E360: register 251 says whether the running script was read before; 41E2B0 marks a script read on leaving it. */
     private int scriptSeen;

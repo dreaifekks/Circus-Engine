@@ -43,6 +43,8 @@ public abstract class DesktopEngine {
     }
     public static String mesIdentity(CircusResources r)throws IOException{return Binary.sha256(r.files.read("AdvData/MES/START.MES",2*1024*1024)).substring(0,16);}
     public static Path mesSaveDirectory(Path root,CircusResources r)throws IOException{return root.resolve(r.profileId+"-"+mesIdentity(r));}
+    /** 4281D0, DC2DM 435F70: a looping effect and one shots each have a channel. Most builds have just the one. */
+    public boolean twoEffectChannels(){return false;}
     public boolean editingText(){return false;}
     public void typeText(String text){}
     public void editKey(int code)throws IOException{}

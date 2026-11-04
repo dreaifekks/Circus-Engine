@@ -65,7 +65,7 @@ public final class DesktopMedia implements AutoCloseable {
      */
     private void keepEffectRinging(){
         DesktopMixer.Track playing=tracks[1];
-        if(!PcHost.followsExe||!engine.resources.profileId.equals("dc2pc-5769"))return;
+        if(!engine.twoEffectChannels())return;
         if(engine.audio(1).isEmpty()||!engine.audioActive(1)){stopRinging();return;}
         if(engine.audioLoop(1)&&loopEffect!=null){loopEffect.stop();loopEffect=null;}
         if(playing==null||playing.finished())return;

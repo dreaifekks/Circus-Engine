@@ -19,33 +19,42 @@ public final class PcText {
     }
     private PcText(){}
 
-    public static Layout layout(String raw,int x0,int y0,int lineHeight){
+    /** What differs between games. DC2DM 425DF4, 4261AE, 4261CB, 426438 and 42650E give its column. */
+    public static final class Rules {
+        public final int body,advance,half,rubyRise,dotDx,dotDy,firstRubyDrop,laterRubyDrop;
+        Rules(int body,int advance,int half,int rubyRise,int dotDx,int dotDy,int firstRubyDrop,int laterRubyDrop){this.body=body;this.advance=advance;this.half=half;this.rubyRise=rubyRise;this.dotDx=dotDx;this.dotDy=dotDy;this.firstRubyDrop=firstRubyDrop;this.laterRubyDrop=laterRubyDrop;}
+    }
+    public static final Rules PC=new Rules(BODY_SIZE,BODY_SIZE,BODY_SIZE,RUBY_RISE,-8,-5,0,0),DM=new Rules(22,21,10,12,-5,-16,6,10);
+    public static Layout layout(String raw,int x0,int y0,int lineHeight){return layout(raw,x0,y0,lineHeight,PC);}
+    public static Layout layout(String raw,int x0,int y0,int lineHeight,Rules r){
         Layout out=new Layout();int x=x0,y=y0,tick=0;
         String[] ruby=null;int rubyX=0,gap=0,placed=0;
         int[] cp=raw.codePoints().toArray();
+        if(r.firstRubyDrop!=0&&lineHasRuby(cp,0))y+=r.firstRubyDrop;
         for(int i=0;i<cp.length;i++){
             int c=cp[i];
-            if(c=='\n'){y+=lineHeight;x=x0;tick++;continue;}
+            if(c=='\n'){y+=lineHeight;x=x0;tick++;if(r.laterRubyDrop!=0&&lineHasRuby(cp,i+1))y+=r.laterRubyDrop;continue;}
             if(c=='｛'&&ruby==null){
                 int slash=find(cp,i+1,'／'),close=slash<0?-1:find(cp,slash+1,'｝');
                 if(close>=0){
                     ruby=new String[slash-i-1];for(int k=0;k<ruby.length;k++)ruby[k]=new String(Character.toChars(cp[i+1+k]));
-                    int room=BODY_SIZE*(close-slash-1)-RUBY_SIZE*ruby.length;
+                    int room=r.advance*(close-slash-1)-RUBY_SIZE*ruby.length;
                     rubyX=room<0?x-(-room)/2:x;gap=Math.max(0,room);placed=0;
                     i=slash;tick++;continue;
                 }
             }
             if(c=='｝'&&ruby!=null){
-                for(;placed<ruby.length;placed++)out.glyphs.add(new Glyph(ruby[placed],rubyAt(rubyX,gap,ruby.length,placed),y-RUBY_RISE,RUBY_SIZE,tick));
+                for(;placed<ruby.length;placed++)out.glyphs.add(new Glyph(ruby[placed],rubyAt(rubyX,gap,ruby.length,placed),y-r.rubyRise,RUBY_SIZE,tick));
                 ruby=null;tick++;continue;
             }
-            out.glyphs.add(new Glyph(new String(Character.toChars(c)),x,y,BODY_SIZE,tick));x+=BODY_SIZE;
-            if(ruby!=null)for(;placed<ruby.length&&rubyAt(rubyX,gap,ruby.length,placed)<x;placed++)out.glyphs.add(new Glyph(ruby[placed],rubyAt(rubyX,gap,ruby.length,placed),y-RUBY_RISE,RUBY_SIZE,tick));
+            out.glyphs.add(new Glyph(new String(Character.toChars(c)),x,y,r.body,tick));x+=c<0x80||c>=0xff61&&c<=0xff9f?r.half:r.advance;
+            if(ruby!=null)for(;placed<ruby.length&&rubyAt(rubyX,gap,ruby.length,placed)<x;placed++)out.glyphs.add(new Glyph(ruby[placed],rubyAt(rubyX,gap,ruby.length,placed),y-r.rubyRise,RUBY_SIZE,tick));
             tick++;
         }
         out.ticks=tick;
         return out;
     }
+    private static boolean lineHasRuby(int[] cp,int from){for(int i=from;i<cp.length&&cp[i]!='\n';i++)if(cp[i]=='｛')return true;return false;}
     private static int rubyAt(int start,int gap,int count,int k){return gap>0?start+(2*k+1)*gap/count/2+RUBY_SIZE*k:start+RUBY_SIZE*k;}
     private static int find(int[] cp,int from,int wanted){for(int i=from;i<cp.length;i++)if(cp[i]==wanted)return i;return -1;}
 

@@ -28,7 +28,25 @@ public class Dc2Host implements MesVm.ContextHost,MesVm.MenuHost,MesVm.ChoiceHos
     public final boolean[] audioLoop=new boolean[6],audioActive=new boolean[6];
     protected final Map<Integer,Integer> registers=new TreeMap<>(),optionBaseline=new TreeMap<>();
     public int musicAttenuation;public long endingClock,musicFadeRemaining;
-    protected long fadeOutMillis(){return 1700;}
+    protected long fadeOutMillis(){return followsDm()?600:1700;}
+    /** Set by the Mac app, where DM follows DC2DM.exe. PcHost has its own switch, for its own builds. */
+    protected boolean followsDm(){return PcHost.followsExe&&resources.profile.id.equals("dc2dm-9d72");}
+    public boolean ctrlHeld;
+    private boolean dmTimedWait,dmDismissable;private long dmClock,dmAnchor;
+    /** 42D019, 432CF1: the first beat runs at once. Bit 0 lets a click end it, bit 1 halves the beat, 4 keeps to the clock. */
+    private long dmWaitMillis(int[] a){
+        if((a[1]&4)!=0){if(a[0]==0){dmAnchor=dmClock;return 0;}long target=dmAnchor+200L*a[0];dmAnchor=target;return Math.max(0,target-dmClock);}
+        if(a[0]==0)return -1;
+        if((a[1]&2)!=0)return 100L*(a[0]*2-1);
+        return 200L*(a[0]-1);
+    }
+    /** 4313EF, 42750A: 34 ms steps across 127 levels, the step taken from the speed setting or the argument. */
+    private long dmFadeMillis(int a1)throws IOException{
+        int[] speed={4,8,16,32},table={32,32,16,8,4,2,1,1};
+        int step=ctrlHeld?32:a1==0?speed[Math.max(0,Math.min(3,read(99,12)))]:a1<8?table[a1]:1,per=a1>=8?34*(a1-7):34;
+        return (long)per*((126+step)/step);
+    }
+    public boolean dmTimedWait(){return dmTimedWait&&remaining!=0;}
     private long musicFadeLength=1700;
     public float musicFadeGain(){return musicFadeRemaining==0?1:musicFadeRemaining/(float)musicFadeLength;}
     protected Variables variables;protected MesScript script;protected int pc;
@@ -73,7 +91,7 @@ public class Dc2Host implements MesVm.ContextHost,MesVm.MenuHost,MesVm.ChoiceHos
         ui.buttons.add(b);
     }
     public void selectChoice(byte[] label,int index)throws IOException{ui.buttons.clear();ui.waiting=false;}
-    public Dc2Host(CircusResources resources,TextCodec codec){if(!resources.profile.id.equals("dc2dm-9d72")&&!PcHost.supports(resources.profile))throw new IllegalArgumentException("DM profile required");this.resources=resources;this.codec=codec;defaultDmPalette(false);for(int k=0;k<128;k++){voicePreferences[k*2]=1;voicePreferences[k*2+1]=99;}int[] defaults={0,0,0,1,1,1,1,20,23,27,1,11,2,0,1,1,7,0,1,0,0,0,0,0,0,0,8,8,0,17,0};for(int n=0;n<defaults.length;n++)registers.put(n,defaults[n]);for(int n:new int[]{215,220,221,222,226,227,228,234,236,237,242,243,244,245,246,253,254,255})registers.put(n,n==220?1:n==245||n==253||n==254?255:0);}
+    public Dc2Host(CircusResources resources,TextCodec codec){if(!resources.profile.id.equals("dc2dm-9d72")&&!PcHost.supports(resources.profile))throw new IllegalArgumentException("DM profile required");this.resources=resources;this.codec=codec;defaultDmPalette(false);for(int k=0;k<128;k++){voicePreferences[k*2]=1;voicePreferences[k*2+1]=99;}int[] defaults={0,0,0,1,1,1,1,20,23,27,1,11,2,0,1,1,7,0,1,0,0,0,0,0,0,0,8,8,0,17,0};for(int n=0;n<defaults.length;n++)registers.put(n,defaults[n]);for(int n:new int[]{215,220,221,222,226,227,228,234,236,237,242,243,244,245,246,253,254,255})registers.put(n,n==220?1:n==245||n==253||n==254?255:0);if(followsDm())registers.put(30,1);}
     public void attach(Variables v){variables=v;}
     public void position(MesScript s,int offset){script=s;pc=offset;}
     public boolean beforeInstruction(Profile p,int opcode)throws IOException{if(!p.id.equals("dc2dm-9d72"))throw new IOException("DM profile required");return waiting();}
@@ -84,9 +102,13 @@ public class Dc2Host implements MesVm.ContextHost,MesVm.MenuHost,MesVm.ChoiceHos
     public int audioMask(){return audioMask;}
     public long remainingMillis(){return remaining;}
     protected void nextTicket()throws IOException{if(ticket==Long.MAX_VALUE)throw new IOException("DM event counter exhausted");ticket++;}
-    public void elapse(long ms){if(musicFadeRemaining>0){musicFadeRemaining=Math.max(0,musicFadeRemaining-ms);if(musicFadeRemaining==0){play(0,"",false);music=-1;}}endingClock+=ms;boolean rolling=credits.active();credits.elapse(ms);if(rolling&&!credits.active())try{state.write(100,29,1);}catch(IOException impossible){throw new IllegalStateException(impossible);}scene.elapse(ms);if(remaining>0)remaining=Math.max(0,remaining-ms);pollAudio();}
+    public void elapse(long ms){dmClock+=Math.max(0,ms);if(musicFadeRemaining>0){musicFadeRemaining=Math.max(0,musicFadeRemaining-ms);if(musicFadeRemaining==0){play(0,"",false);music=-1;}}endingClock+=ms;boolean rolling=credits.active();credits.elapse(ms);if(rolling&&!credits.active())try{state.write(100,29,1);}catch(IOException impossible){throw new IllegalStateException(impossible);}scene.elapse(ms);if(remaining>0)remaining=Math.max(0,remaining-ms);pollAudio();}
     protected void delay(long ms)throws IOException{remaining=ms;if(ms!=0)nextTicket();}
     public boolean signal(long expected,MesVm.HostSignal signal)throws IOException{if(expected!=ticket||!waiting()||ui.waiting)return false;
+        if(followsDm()&&signal==MesVm.HostSignal.ADVANCE){ // 4334E0: fades and plain waits take no click. 42C1A2: moving on stops the voice.
+            if(!textWaiting&&!presentationWaiting&&movie.isEmpty()&&remaining!=0&&!(dmTimedWait&&dmDismissable))return false;
+            if(textWaiting&&!presentationWaiting&&read(99,222)==0)play(5,"",false);
+        }
         if(!movie.isEmpty()&&signal==MesVm.HostSignal.MEDIA_COMPLETE){movie="";return true;}
         if(remaining!=0&&signal==MesVm.HostSignal.ADVANCE){scene.elapse(86400000);remaining=0;return true;}
         if(presentationWaiting&&(signal==MesVm.HostSignal.TEXT_COMPLETE||signal==MesVm.HostSignal.ADVANCE)){presentationWaiting=false;textRendered=true;return true;}
@@ -104,7 +126,7 @@ public class Dc2Host implements MesVm.ContextHost,MesVm.MenuHost,MesVm.ChoiceHos
             case 21:return availableSaves.contains(1)?1:0; // 4278D0(1): newest quick save, resolved by portable slot store.
             case 227:return registers.get(227); // 434542 toggles the system toolbar; initial state is zero.
             case 228:return replayMode?1:0; // C29180: replay entry, inactive during ordinary new game.
-            case 223:return 0; // 424820: physical Ctrl key held; touchscreen has no held Ctrl key.
+            case 223:return followsDm()&&ctrlHeld?1:0; // 424820: physical Ctrl key held; touchscreen has no held Ctrl key.
             case 17:return registers.get(17); // 78F400: scene-start prompt, captured default.
             case 12:return registers.get(12); // 78F3FC: captured transition/scroll speed.
             case 26:case 27:return registers.get(index); // 11 - captured text/auto speed (3).
@@ -114,9 +136,9 @@ public class Dc2Host implements MesVm.ContextHost,MesVm.MenuHost,MesVm.ChoiceHos
             case 251:return scriptId();
             case 255:return state.read(99,255);
             case 244:return music;
-            case 248:return audioActive[1]?1:0;
-            case 249:return audioActive[0]?1:0;
-            case 250:return audioActive[5]?1:0;
+            case 248:return followsDm()?(audioActive[1]?0:1):audioActive[1]?1:0; // 4294CB: 1 means idle, and these are SE, voice, BGM.
+            case 249:return followsDm()?(audioActive[5]?0:1):audioActive[0]?1:0;
+            case 250:return followsDm()?(audioActive[0]?0:1):audioActive[5]?1:0;
             default:if(registers.containsKey(index))return registers.get(index);
         }}return state.read(bank,index);
     }
@@ -135,7 +157,9 @@ public class Dc2Host implements MesVm.ContextHost,MesVm.MenuHost,MesVm.ChoiceHos
         if(mode==1){scene.reset();ui.quads.clear();}return true;
     }
     public byte[] automaticMenuAction(){byte[] a=automaticMenuAction;automaticMenuAction=null;return a;}
-    public byte[] menuAction(long expected,int button)throws IOException{if((!ui.waiting&&remaining>=0)||expected!=ticket)return null;if(button<0){String back=ui.actions[confirming?1:3];return back.isEmpty()?null:back.getBytes(Binary.SJIS);}require(button<ui.buttons.size(),"button index");String action=ui.buttons.get(button).action;if(confirming){if(action.equals(":y"))action=ui.actions[0];else if(action.equals(":n"))action=ui.actions[1];}return action.isEmpty()?null:action.getBytes(Binary.SJIS);}
+    public byte[] menuAction(long expected,int button)throws IOException{
+        if(followsDm()&&button<0&&!ui.waiting&&remaining!=0&&expected==ticket){String timed=ui.actions[button==-2?2:3];return timed.isEmpty()?null:timed.getBytes(Binary.SJIS);} // 4333B0: right goes to slot 3, left to slot 2.
+        if((!ui.waiting&&remaining>=0)||expected!=ticket)return null;if(button<0){String back=ui.actions[confirming?1:3];return back.isEmpty()?null:back.getBytes(Binary.SJIS);}require(button<ui.buttons.size(),"button index");String action=ui.buttons.get(button).action;if(confirming){if(action.equals(":y"))action=ui.actions[0];else if(action.equals(":n"))action=ui.actions[1];}return action.isEmpty()?null:action.getBytes(Binary.SJIS);}
     public void acceptMenuAction(int button)throws IOException{remaining=0;if(button>=0){registers.put(245,button);int sound=ui.buttons.get(button).clickSound;if(sound!=255)play(1,resources.named("sound",sound),false);if(!ui.buttons.get(button).voice.isEmpty())playVoice(ui.buttons.get(button).voice);}ui.waiting=false;ui.pressed=ui.hovered=-1;choiceCount=0;gridWaiting=confirming=false;}
     public boolean effectsEnabled()throws IOException{return read(99,10)!=0;}
     public void hoverMenu(int button)throws IOException{if(button==ui.hovered)return;require(button>=-1&&button<ui.buttons.size(),"hover");ui.hovered=button;if(button>=0){registers.put(245,button);int sound=ui.buttons.get(button).hoverSound;if(sound!=255)play(1,resources.named("sound",sound),false);}}
@@ -174,6 +198,7 @@ public class Dc2Host implements MesVm.ContextHost,MesVm.MenuHost,MesVm.ChoiceHos
         scene.slots[1]="@ui-capture";Arrays.fill(scene.slots,2,10,"");scene.backgroundX=scene.backgroundY=0;
     }
     public boolean command(String op,int[] a,byte[] bytes)throws IOException{
+        if(followsDm()&&!op.equals("dm.wait.duration"))dmTimedWait=dmDismissable=false;
         switch(op){
         // Record shape and PC effect are verified from the 2006 handler, but the engine state it
         // touches is not modelled yet. Recording it keeps a missing model from masquerading as
@@ -212,7 +237,7 @@ public class Dc2Host implements MesVm.ContextHost,MesVm.MenuHost,MesVm.ChoiceHos
         case "dm.ui.button_template":ui.storeButtons(a[0]);return true;
         case "dm.ui.resource":require(a[0]>=0&&a[0]<5,"UI slot");if(!text(bytes).equals("-"))scene.slots[21+a[0]]=text(bytes);return true;
         case "host.command_with_string":ui.button(a,bytes);return true;
-        case "dm.ui.button_voice":ui.last().voice=text(bytes);return true;
+        case "dm.ui.button_voice":ui.last().voice=text(bytes);if(followsDm())ui.last().clickSound=255;return true; // 42D834
         // 40DE20 indexes the button table with 988C9C-1 and returns before writing when that is negative,
         // so LOAD/SAVE (which open their page with 54h before creating any 4Eh button) must stay a no-op.
         case "dm.ui.button_sound":{if(ui.buttons.isEmpty())return true;ui.last().hoverSound=a[0];ui.last().clickSound=a[1];return true;}
@@ -246,7 +271,7 @@ public class Dc2Host implements MesVm.ContextHost,MesVm.MenuHost,MesVm.ChoiceHos
         }
         case "dm.scene.character_transform":{int mode=a[3],n=mode==0?a[2]:mode&15;if(mode==255)return true;require(n>=0&&n<4,"character transform index");int[] c=scene.characters[n];if(mode==0){c[0]=a[0];c[1]=a[1];c[2]=100;c[3]=c[4]=0;}else if((mode&16)!=0){c[2]=a[0];c[3]=a[1];c[4]=a[2];}else if((mode&32)!=0)c[5]=a[0];return true;}
         case "dm.scene.background_origin":require(a[3]==0,"background transform");scene.portraitX=a[0];scene.portraitY=a[1];return true;
-        case "dm.scene.scroll":if(a[2]==1){scene.backgroundX=a[0];scene.backgroundY=a[1];scene.scrollStep=0;return true;}require(a[2]==0||a[2]>=8,"scroll mode");scene.targetX=a[0];scene.targetY=a[1];scene.scrollStep=a[2]==0?8:Math.max(1,a[2]-8);scene.scrollPeriod=34;scene.scrollClock=0;delay((Math.max(Math.abs((long)a[0]-scene.backgroundX),Math.abs((long)a[1]-scene.backgroundY))+scene.scrollStep-1)/scene.scrollStep*34+340);return true;
+        case "dm.scene.scroll":if(a[2]==1){scene.backgroundX=a[0];scene.backgroundY=a[1];scene.scrollStep=0;return true;}require(a[2]==0||a[2]>=8,"scroll mode");scene.targetX=a[0];scene.targetY=a[1];scene.scrollStep=a[2]==0?(followsDm()?(ctrlHeld?16:new int[]{2,4,8,16}[Math.max(0,Math.min(3,read(99,12)))]):8):Math.max(1,a[2]-8);scene.scrollPeriod=34;scene.scrollClock=0;delay((Math.max(Math.abs((long)a[0]-scene.backgroundX),Math.abs((long)a[1]-scene.backgroundY))+scene.scrollStep-1)/scene.scrollStep*34+340);return true;
         case "dm.scene.transition":{
             int kind=a[0];
             if(kind==9){captureUi();return true;}
@@ -254,10 +279,11 @@ public class Dc2Host implements MesVm.ContextHost,MesVm.MenuHost,MesVm.ChoiceHos
             require(kind==0||kind==1||kind==2||kind==3||kind==4||kind==5||kind==6||kind==8||kind==16||kind==17||kind==20||kind==21||kind==30||kind==31||kind==32,"transition "+Arrays.toString(a));
             if(kind==32)return true;
             long duration=(kind==30||kind==31)?0:kind==5?68:kind==6?306:200L*Math.max(1,a[1]);
+            if(followsDm()&&kind<=2)duration=dmFadeMillis(a[1]);else if(followsDm()&&kind==3)duration=68L*a[1];else if(followsDm()&&kind==4)duration=306; // 431750, 4315B2
             if(kind==2||kind==16||kind==17||kind==20){speaker="";body="";}
             scene.publish(ui,kind,duration);delay(duration);return true;
         }
-        case "dm.wait.duration":scene.publish(ui,0,0);delay(a[0]==0?-1:a[0]*200L);return true;
+        case "dm.wait.duration":if(followsDm()){if(scene.differs(ui))scene.publish(ui,0,0);dmDismissable=(a[1]&1)!=0;dmTimedWait=true;delay(dmWaitMillis(a));return true;}scene.publish(ui,0,0);delay(a[0]==0?-1:a[0]*200L);return true;
         case "dm.wait.mode":if(a[0]==0){if(choiceCount>0){ui.waiting=true;scene.publish(ui,0,0);nextTicket();}else delay(-1);}else waitIndicatorStyle=a[1];return true;
         case "dm.audio.voice_prepare":return true; // 436940 loads the following voice into the native cache; no playback.
         case "dm.audio.voice":case "dm.audio.voice_wait":{
@@ -267,7 +293,7 @@ public class Dc2Host implements MesVm.ContextHost,MesVm.MenuHost,MesVm.ChoiceHos
         case "dm.audio.music_attenuation":musicAttenuation=a[0];return true;
         // 42E91C -> 435E60 starts BGM fade; 432A9E subsequently waits for its completion.
         case "dm.audio.fade_music":if(audioActive[0]&&musicFadeRemaining==0)musicFadeRemaining=musicFadeLength=fadeOutMillis();return true;
-        case "dm.audio.sound":if(a[0]==-2){play(5,"",false);return true;}if(a[0]==-1){play(1,"",false);return true;}require(a[0]>=0,"sound control");play(1,resources.named("sound",a[0]),a[1]!=0);return true;
+        case "dm.audio.sound":if(a[0]==-2){play(5,"",false);return true;}if(a[0]==-1){if(followsDm()&&audioActive[1]&&audio[1].equals(resources.named("sound",223)))return true; /* 436120: a stop lets the 223 sound finish. */play(1,"",false);return true;}require(a[0]>=0,"sound control");play(1,resources.named("sound",a[0]),a[1]!=0);return true;
         case "dm.audio.music":if(a[0]==255){play(0,"",false);music=-1;return true;}require(a[0]>=0&&a[0]<400&&a[1]>=0&&a[1]<=2,"music mode");if(a[1]!=1||music!=a[0])play(0,resources.named("music",a[0]),a[1]!=2);music=a[0];state.write(96,music,1);return true;
         case "wait.audio":audioMask=a[0];pollAudio();if(audioMask!=0)nextTicket();return true;
         case "dm.system.persist":switch(a[0]){
@@ -280,7 +306,7 @@ public class Dc2Host implements MesVm.ContextHost,MesVm.MenuHost,MesVm.ChoiceHos
             case 10:resources.scripts().script("START");return true;
             case 11:messageMode=a[1];return true;
             case 15:inputMode=a[1];return true;
-            case 20:for(int n=5;n<=30;n++)registers.put(n,new int[]{1,1,20,23,27,1,11,2,0,1,1,7,0,1,0,0,0,0,0,0,0,8,8,0,17,0}[n-5]);return true;
+            case 20:for(int n=5;n<=30;n++)registers.put(n,new int[]{1,1,20,23,27,1,11,2,0,1,1,7,0,1,0,0,0,0,0,0,0,8,8,0,17,followsDm()?1:0}[n-5]);return true;
             case 18:return true; // Saved display state is owned by the session snapshot.
             default:throw new IOException("Unimplemented DM persistence command "+Arrays.toString(a));
         }

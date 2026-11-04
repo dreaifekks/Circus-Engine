@@ -31,6 +31,14 @@ public final class Dc2Scene {
         transitionKind=kind;transitionDuration=transitionRemaining=duration;transitionSerial++;revision++;
     }
     public long scrollClock;
+    /** Whether a publish would change the picture; a timed wait only repaints if it would. */
+    public boolean differs(Dc2Ui ui)throws IOException{
+        if(!Arrays.equals(slots,shown.slots)||backgroundX!=shown.x||backgroundY!=shown.y)return true;
+        for(int n=0;n<4;n++)if(!Arrays.equals(characters[n],shown.actors[n]))return true;
+        List<Dc2Ui.Quad> now=Dc2Ui.copyQuads(ui.quads);now.addAll(0,Dc2Ui.copyQuads(ui.quadTemplates.get(0)));
+        ByteArrayOutputStream a=new ByteArrayOutputStream(),b=new ByteArrayOutputStream();Dc2Ui.saveQuads(new DataOutputStream(a),now);Dc2Ui.saveQuads(new DataOutputStream(b),shown.quads);
+        return !Arrays.equals(a.toByteArray(),b.toByteArray());
+    }
     /** Mac app, following DC2PC.exe. None of this is saved: a save made mid-move simply lands at the end of the move. */
     public boolean pauseEffectsInTransition;
     private int slideActor=-1,slideFromX,slideFromY,slideStep;private long slideClock;
