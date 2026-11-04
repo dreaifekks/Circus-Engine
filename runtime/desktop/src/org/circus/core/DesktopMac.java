@@ -22,6 +22,28 @@ final class DesktopMac {
     private static final Path SUPPORT=Paths.get(System.getProperty("user.home"),"Library","Application Support","DC Runtime");
     private static final Path LAST_GAME=SUPPORT.resolve("last-game.txt");
 
+    /** From tools/package_macos.py: a game's own app has its name, and opens only that game. */
+    private static String appName="DC Runtime";
+    private static Path pinnedGame;
+    private static void readAppFile(){
+        String file=System.getProperty("dc.app");if(file==null)return;
+        try{
+            java.util.List<String> lines=Files.readAllLines(Paths.get(file),StandardCharsets.UTF_8);
+            if(lines.size()>0&&!lines.get(0).isEmpty())appName=lines.get(0);
+            if(lines.size()>1&&!lines.get(1).isEmpty())pinnedGame=Paths.get(lines.get(1));
+        }catch(IOException e){System.err.println(e);}
+    }
+    static String appName(){return appName;}
+    static Path pinnedGame(){return pinnedGame;}
+    /** The disk may be away. Null if the user gives up. */
+    static Path waitForPinnedGame()throws Exception{
+        while(!Files.isDirectory(pinnedGame)){
+            final int[] answer={1};
+            SwingUtilities.invokeAndWait(()->answer[0]=JOptionPane.showOptionDialog(null,"找不到游戏目录：\n"+pinnedGame+"\n\n如果它在外接盘上，请先接上。",appName,JOptionPane.DEFAULT_OPTION,JOptionPane.WARNING_MESSAGE,null,new String[]{"重试","退出"},"重试"));
+            if(answer[0]!=0)return null;
+        }
+        return pinnedGame;
+    }
     /** A 16 ms Swing timer fires about every 20 ms on a Mac; 14 ms gives the intended 60 frames a second. */
     static final int FRAME_DELAY=14;
 
@@ -45,11 +67,12 @@ final class DesktopMac {
 
     /** Runs before AWT starts: from an app the working directory is /, so the build/ defaults cannot work. */
     static void prepare(){
+        readAppFile();
         if(System.getProperty("dc.saveRoot")==null)System.setProperty("dc.saveRoot",SUPPORT.resolve("saves").toString());
         if(System.getProperty("dc.cacheRoot")==null)System.setProperty("dc.cacheRoot",SUPPORT.resolve("cache").toString());
         PcHost.followsExe=true;
         System.setProperty("apple.laf.useScreenMenuBar","true");
-        System.setProperty("apple.awt.application.name","DC Runtime");
+        System.setProperty("apple.awt.application.name",appName);
         try{UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());}catch(ReflectiveOperationException|UnsupportedLookAndFeelException e){System.err.println(e);}
         Thread fonts=new Thread(DesktopMac::warmFonts,"dc-font-warmup");fonts.setDaemon(true);fonts.start();
     }
@@ -90,8 +113,7 @@ final class DesktopMac {
     /** Function keys belong to the system on a Mac (F11 shows the desktop), so each one also gets a menu shortcut. */
     static void menu(JFrame frame,JComponent keys,ActionListener chooseGame){
         JMenu game=new JMenu("游戏");
-        game.add(item("选择其他游戏目录…",KeyEvent.VK_O,0,chooseGame));
-        game.addSeparator();
+        if(pinnedGame==null){game.add(item("选择其他游戏目录…",KeyEvent.VK_O,0,chooseGame));game.addSeparator();}
         game.add(key("快速保存（F5）",KeyEvent.VK_S,0,keys,KeyEvent.VK_F5));
         game.add(key("快速读取（F9）",KeyEvent.VK_L,0,keys,KeyEvent.VK_F9));
         game.add(key("全屏（F11）",KeyEvent.VK_F,InputEvent.CTRL_DOWN_MASK,keys,KeyEvent.VK_F11));

@@ -64,20 +64,30 @@ python tools/package_desktop.py --jdk <JDK21> --ffmpeg <ffmpeg.exe> --version 0.
 
 ### macOS（Apple Silicon）
 
+一条命令打出一个游戏的 app，可以拖到「应用程序」或任何地方：
+
 ```sh
-python3 tools/package_macos.py
+python3 tools/package_macos.py --game "/Volumes/外接盘/games/DC2PC"
 ```
 
-产物 `build/distribution/DC Runtime.app`，双击或 `open` 启动，选包含 `AdvData` 或 `DC3_Data` 的目录。
-需要 Python 3.10+ 和 Xcode Command Line Tools。首次运行会下载 Temurin 21 和 FFmpeg 源码并编译，
-放在 `build/macos-tools/`，约一分钟；之后复用。包内自带 JRE 和静态 FFmpeg，不依赖系统 Java 和 Homebrew，
-只做 ad-hoc 签名，供本机使用。
+| 参数 | 作用 |
+|---|---|
+| `--game DIR` | app 打开的游戏目录。app 只记路径，不含游戏数据 |
+| `--name NAME` | app 名称。默认取游戏名，来自 EXE 版本信息或 profile 标题 |
+| `--icon PATH` | 图片或 `.icns`。默认取游戏主 EXE 里最大的图标 |
+| `--sign IDENTITY` | 签名身份，默认 ad-hoc。可选值见 `security find-identity -v -p codesigning` |
+| `--install [DIR]` | 同时复制过去，覆盖同名 app。`DIR` 默认 `/Applications` |
 
-- 存档和影片缓存在 `~/Library/Application Support/DC Runtime/`。
-- 下次启动直接进上次的游戏。换游戏用菜单「游戏 → 选择其他游戏目录…」（⌘O）；
-  删除同目录下的 `last-game.txt` 也会重新询问。
+不带 `--game` 时打出通用的 `DC Runtime.app`，首次启动选目录，之后记住上次的游戏，可用菜单「游戏 → 选择其他游戏目录…」（⌘O）更换。
+
+产物在 `build/distribution/`。需要 Python 3.10+ 和 Xcode Command Line Tools。首次运行会下载 Temurin 21 和 FFmpeg 源码并编译，
+放在 `build/macos-tools/`，约一分钟；之后复用。包内自带 JRE 和静态 FFmpeg，不依赖系统 Java 和 Homebrew。
+
+- 只签名，不做公证，供本机使用。游戏的图标会进 app，所以不要分发这样打出来的 app。
+- 存档和影片缓存都在 `~/Library/Application Support/DC Runtime/`，通用 app 和各游戏的 app 共用。
+- 外接盘没接时，游戏 app 会提示重试或退出。
 - 功能键常被系统占用，菜单里有等效快捷键：快速保存 ⌘S、快速读取 ⌘L、全屏 ⌃⌘F。
-- 游戏放在「文稿」「下载」或外接盘时，系统会询问访问权限；重新打包后可能再问一次。
+- 游戏放在「文稿」「下载」或外接盘时，系统会询问访问权限。ad-hoc 签名每次打包都会变，可能要再问；用自己的证书签名可以避免这一点。
 
 ## 操作（Android）
 
@@ -124,10 +134,10 @@ docs/               VM 规范、各版本兼容性、版本记录
 需要 Python 3.10+、JDK 17+；打包 Android 另需上述 SDK／NDK。脚本不依赖 Gradle；除 macOS 打包外不下载工具链。
 
 ```powershell
-python -m unittest discover -s tests            # 47 项 Python 测试
+python -m unittest discover -s tests            # 50 项 Python 测试
 python tools/build_android.py --java-home ...   # APK，内含 997 项 JVM 断言
 python tools/package_desktop.py ...             # Windows 包
-python3 tools/package_macos.py                  # macOS 包
+python3 tools/package_macos.py --game DIR       # macOS 包
 ```
 
 构建报告和签名校验在 `build/android/`，模拟器证据在 `build/android-smoke/`。
