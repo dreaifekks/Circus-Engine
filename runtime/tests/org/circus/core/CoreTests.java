@@ -70,6 +70,8 @@ public final class CoreTests {
         Archive crm=archive(assets.read("sample.crm"));Crx.Resolver resolver=new Crx.Resolver(){public byte[] byOffset(long off)throws IOException{return crm.read(crm.atOffset(off));}public byte[] byName(byte[] n)throws IOException{return crm.read(crm.find(n));}};
         Crx.Image base=Crx.decode(crm.read(crm.entries.get(0)),resolver),diff=Crx.decode(crm.read(crm.entries.get(1)),resolver);
         check(base.argb()[0]==0xff1e140a,"CRX color order");check(diff.argb()[5]==0xff21160b,"CRXD additive patch");check(diff.argb()[0]==base.argb()[0],"CRXD clipping");
+        java.nio.ByteBuffer emptyDiff=java.nio.ByteBuffer.allocate(52).order(java.nio.ByteOrder.LITTLE_ENDIAN);emptyDiff.putInt(0x44585243);emptyDiff.putInt(0);emptyDiff.putInt((int)crm.entries.get(0).offset);emptyDiff.position(32);emptyDiff.putInt(0x47585243);emptyDiff.putInt(0);emptyDiff.putShort((short)0);emptyDiff.putShort((short)0);emptyDiff.putShort((short)3);
+        check(Arrays.equals(Crx.decode(emptyDiff.array(),resolver).argb(),base.argb()),"CRXD with an empty difference is its base");
         NamesCatalog names=new NamesCatalog(names());check(names.table("images").get(0).name.equals("A")&&names.table("music").get(0).extra[0]==42,"NAMES keeps opaque numeric fields");
         reject(()->new NamesCatalog(Arrays.copyOf(names(),names().length+1)),"unknown NAMES tail rejected");
         GameResources.Storage storage=new GameResources.Storage(){

@@ -22,7 +22,10 @@ public final class Crx {
         Binary.range(0,36,data.length);byte[] base;
         try{base=resolver.byOffset(Binary.u32(data,8));}catch(FileNotFoundException e){int end=12;while(end<32&&data[end]!=0)end++;base=resolver.byName(Arrays.copyOfRange(data,12,end));}
         // GARbro's CRXD base must be CRXG; do not guess recursive base composition.
-        Image original=plain(base),diff=plain(diffBytes(data,resolver,new HashSet<Long>()));
+        byte[] change=diffBytes(data,resolver,new HashSet<Long>());
+        // A 0x0 difference means this picture is its base unchanged: D.C.II P.C. has actors stored this way.
+        Binary.range(0,20,change.length);if(Binary.u16(change,8)==0||Binary.u16(change,10)==0)return plain(base);
+        Image original=plain(base),diff=plain(change);
         if(original.bpp!=diff.bpp||original.bpp==8)throw new IOException("Unsupported CRXD pixel layout");
         int left=Math.max(original.x,diff.x),top=Math.max(original.y,diff.y),right=Math.min(original.x+original.width,diff.x+diff.width),bottom=Math.min(original.y+original.height,diff.y+diff.height),ps=original.bpp/8;
         for(int y=top;y<bottom;y++)for(int x=left;x<right;x++){
