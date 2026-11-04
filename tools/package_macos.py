@@ -14,6 +14,7 @@ from pathlib import Path
 import platform
 import shutil
 import subprocess
+import tempfile
 
 from build_desktop import build, ROOT
 from game_identity import describe
@@ -69,7 +70,11 @@ def build_ffmpeg():
 
 def foreign_libraries(path):
     """Linked libraries that a Mac without Homebrew or a JDK would not have."""
-    lines = subprocess.run(['otool', '-L', str(path)], capture_output=True, text=True, check=True).stdout.splitlines()[1:]
+    # otool reads "name(member)" as a member of a static library, so a game name with brackets needs another path.
+    with tempfile.TemporaryDirectory() as folder:
+        link = Path(folder) / 'binary'
+        link.symlink_to(Path(path).resolve())
+        lines = subprocess.run(['otool', '-L', str(link)], capture_output=True, text=True, check=True).stdout.splitlines()[1:]
     return [line.split()[0] for line in lines if not line.strip().startswith(SYSTEM_LIBRARIES)]
 
 
