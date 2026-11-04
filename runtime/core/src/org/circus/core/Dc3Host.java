@@ -65,7 +65,73 @@ public final class Dc3Host implements MesVm.ContextHost,MesVm.ChoiceHost,MesVm.T
     /** wait.message - the opcode that closes a line of dialogue. */
     public static int waitMessageOpcode(String id){return id.equals("dc3pp-9872")?0x07:0x06;}
     public Dc3Layout layout(){return scene.layout;}
-    public Dc3Host(CircusResources resources,TextCodec codec,boolean originalSystem){if(resources!=null&&!supports(resources.profile.id))throw new IllegalArgumentException("DD host cannot execute "+resources.profile.id);this.resources=resources;gallery=new Dc3Gallery(resources);this.originalSystem=originalSystem;state=new Dc3State(originalSystem);dialogue=new DialogueHost(codec);dialogue.familyName="朝倉";dialogue.givenName="清隆";if(resources!=null)scene.layout=Dc3Layout.of(resources.profile.id);}
+    public Dc3Host(CircusResources resources,TextCodec codec,boolean originalSystem){if(resources!=null&&!supports(resources.profile.id))throw new IllegalArgumentException("DD host cannot execute "+resources.profile.id);this.resources=resources;gallery=new Dc3Gallery(resources);this.originalSystem=originalSystem;state=new Dc3State(originalSystem);dialogue=new DialogueHost(codec);dialogue.familyName="朝倉";dialogue.givenName="清隆";if(resources!=null)scene.layout=Dc3Layout.of(resources.profile.id);dialogue.spreadRubyDots=PcHost.followsExe&&!followsPp();if(followsPp())defaultsPp();ui.keepsPanels=PcHost.followsExe&&!followsPp();if(PcHost.followsExe)history.limit=400;} // 403EE4
+    /** The Mac app follows the exes. P.P. is a different engine from D.D. and W.Y.: DirectDraw and DC2PC's habits. */
+    public boolean followsPp(){return PcHost.followsExe&&resources!=null&&resources.profile.id.equals("dc3pp-9872");}
+    private boolean followsWy(){return PcHost.followsExe&&resources!=null&&resources.profile.id.equals("dc3wy-a09f");}
+    /** P.P. 478110 */
+    private void defaultsPp(){int[][] values={{5,1},{6,1},{7,20},{8,23},{9,27},{10,1},{11,11},{12,2},{13,0},{14,1},{15,1},{16,7},{17,0},{18,1},{26,8},{27,8},{28,0},{29,17},{30,1}};for(int[] v:values)try{state.write(99,v[0],v[1]);}catch(IOException e){throw new IllegalStateException(e);}}
+    /** Progress written before P.P. was followed holds D.D.'s table, whose speed 6 is outside P.P.'s four speeds. */
+    public void migrateProgressPp()throws IOException{if(followsPp()&&state.read(99,7)==65&&state.read(99,8)==80&&state.read(99,12)==6)defaultsPp();}
+    private long clockMillis,waitAnchor;
+    /** P.P. 429052: bit 1 halves the beat, 4 keeps to the clock, 8 waits for actors to settle. Bit 0 lets a click end it. */
+    private void waitPp(int[] a)throws IOException{
+        if(a[1]==8){delay(scene.animationRemaining(),false);return;}
+        if((a[1]&4)!=0){if(a[0]==0||waitAnchor==0){waitAnchor=clockMillis;return;}long target=waitAnchor+200L*a[0];waitAnchor=target;delay(Math.max(0,target-clockMillis),(a[1]&1)!=0);return;}
+        if(a[0]==0){delay(-1,(a[1]&1)!=0);return;}
+        delay((a[1]&2)!=0?100L*(a[0]*2-1):200L*(a[0]-1),(a[1]&1)!=0);
+    }
+    /** P.P. 42D1E0: 127 levels at 34 ms a step. */
+    private long fadePp(int a1)throws IOException{
+        int[] speed={4,8,16,32},table={32,32,16,8,4,2,1,1};
+        int step=ctrlHeld?32:a1==0?speed[Math.max(0,Math.min(3,state.read(99,12)))]:a1<8?table[a1]:1,per=a1>=8?34*(a1-7):34;
+        return (long)per*((126+step)/step);
+    }
+    public boolean ctrlHeld;
+    private boolean durationWait;
+    /** 4336C8: skipping ends a timed wait unless 9:99 is set. */
+    public void endTimedWait(){if(durationWait)remaining=0;}
+    /** 408B50: a right click ends a fade. */
+    public void finishFade(){scene.fade.elapsed=scene.fade.duration;remaining=0;}
+    /** 40EAB0 */
+    private static long fadeFrames(long frames,int speed){return speed<5?frames+(long)((frames/2)/5.0*(5-speed)):speed>5?frames-(long)((frames/2)/5.0*(speed-5)):frames;}
+    private int uiChannel(){return ui.keepsPanels?4:1;}
+    /** 43C860: interface sounds have channels of their own, so they do not cut off the scene's. */
+    public void uiSound(int sound)throws IOException{if(sound==255)return;int ch=uiChannel();audio[ch]=resources.named("sound",sound);audioLoop[ch]=false;audioActive[ch]=true;audioGeneration[ch]++;}
+    public void stopVoice(){audio[5]="";audioActive[5]=false;audioGeneration[5]++;}
+    public void playSound(int index)throws IOException{audio[1]=resources.named("sound",index);audioLoop[1]=false;audioActive[1]=true;audioGeneration[1]++;}
+    private static final int[] PP_NEXT_TRACK={1,2,3,4,5,6,7,8,9,10,11,13,14,15,16,17,18,19,20,21,22,23,25,27,28,29,32,33,34,35,36,40,80,81,82,83,84,85,86,87,88,89,90,91,110,111,113,129,136,138,142,143,144,148,149,150,151,152,153,154,155,156,158,160,161,162,163,165,169,170,171,174,175,176,177,192,199,201,202,203}; // 47CC98
+    private int ppTrack;private final boolean[] ppPlayed=new boolean[24];private final Random ppRandom=new Random();
+    /** The native services of P.P.'s system scripts. True if handled. */
+    private boolean systemPp(int[] a)throws IOException{
+        switch(a[0]){
+            case 11: // 412D5C
+                if(a[1]==0){int n=state.read(99,255);ppTrack=n>=0&&n<PP_NEXT_TRACK.length?PP_NEXT_TRACK[n]:0;}
+                else if(a[1]==1){pendingAudio[0]=resources.named("music",ppTrack);audioLoop[0]=false;musicId=ppTrack;musicGain=1;musicFadeRemaining=0;}
+                return true;
+            case 12: // 412DD5
+                if(a[1]==1)Arrays.fill(ppPlayed,false);
+                else if(a[1]==2){boolean all=true;for(boolean p:ppPlayed)all&=p;if(all)Arrays.fill(ppPlayed,false);int pick;do pick=ppRandom.nextInt(24);while(ppPlayed[pick]);variables.write(7,98,pick);ppPlayed[pick]=true;}
+                return true;
+            case 206:{ // 4131B7: the highest of five affection counters; ties keep the earlier.
+                int best=0,most=variables.read(5,95);for(int n=1;n<5;n++){int v=variables.read(5,95+n);if(v>most){most=v;best=n;}}variables.write(3,0,best);return true;
+            }
+            case 207:case 210:case 211: // 4126C0, 40EF70, 411A10: native animations that are not reproduced; the script carries on past them.
+                return true;
+            case 212:{ // 4132FE: whether the chosen track is outside the fourteen rows shown.
+                int top=state.read(99,246),chosen=variables.read(7,98);boolean above=a[1]==0?top>=chosen:top>chosen;
+                variables.write(7,92,above||chosen>=top+14?1:0);return true;
+            }
+            default:return false;
+        }
+    }
+    /** W.Y. 4096BF, 409759 */
+    private boolean systemWy(int[] a)throws IOException{
+        if(a[0]==205)return true;
+        if(a[0]==206){List<Integer> done=new ArrayList<>();for(int n=0;n<5;n++)if(state.read(100,n)!=0)done.add(n);variables.write(5,0,done.isEmpty()?5:done.get(ppRandom.nextInt(done.size())));return true;}
+        if(a[0]==207){variables.write(5,10,0);String lower=scriptName.toLowerCase(Locale.ROOT);for(int n=1;n<=8;n++)if(lower.contains("wy_"+n)){variables.write(5,10,n-1);break;}return true;}
+        return false;
+    }
     public String checkpointLabel(){return checkpointLabel;}
     public void attach(Variables variables){this.variables=variables;}
     public void position(MesScript script,int pc){scriptName=script.name;scriptOffset=pc;}
@@ -79,8 +145,8 @@ public final class Dc3Host implements MesVm.ContextHost,MesVm.ChoiceHost,MesVm.T
     }
     private void syncDialogue()throws IOException {boolean current=dialogue.waiting();if(current&&!wasDialogue){nextTicket();if(originalSystem&&!dialogue.shownText.isEmpty())history.append(dialogue.shownSpeaker,dialogue.shownText,historyVoice,scriptName,scriptOffset);historyVoice="";}wasDialogue=current;}
     private void nextTicket()throws IOException {if(ticket==Long.MAX_VALUE)throw new IOException("Host event counter exhausted");ticket++;}
-    private void delay(long millis,boolean canInterrupt)throws IOException {publish();remaining=millis;interruptible=canInterrupt;if(millis!=0)nextTicket();}
-    public void elapse(long milliseconds){musicPollElapsed=Math.min(1000,musicPollElapsed+Math.max(0,milliseconds));boolean roll=credits.active();credits.elapse(milliseconds);if(roll&&!credits.active())finishCredits();if(remaining>0)remaining=Math.max(0,remaining-Math.max(0,milliseconds));scene.elapse(milliseconds);if(musicFadeRemaining>0){musicFadeRemaining=Math.max(0,musicFadeRemaining-Math.max(0,milliseconds));musicGain=musicFadeRemaining/(float)musicFadeDuration;if(musicFadeRemaining==0){audio[0]="";audioActive[0]=false;audioGeneration[0]++;musicId=-1;}}performance.elapse(milliseconds,scene,this::perform);pollAudioWait();}
+    private void delay(long millis,boolean canInterrupt)throws IOException {durationWait=false;publish();remaining=millis;interruptible=canInterrupt;if(millis!=0)nextTicket();}
+    public void elapse(long milliseconds){clockMillis+=Math.max(0,milliseconds);musicPollElapsed=Math.min(1000,musicPollElapsed+Math.max(0,milliseconds));boolean roll=credits.active();credits.elapse(milliseconds);if(roll&&!credits.active())finishCredits();if(remaining>0)remaining=Math.max(0,remaining-Math.max(0,milliseconds));scene.elapse(milliseconds);if(musicFadeRemaining>0){musicFadeRemaining=Math.max(0,musicFadeRemaining-Math.max(0,milliseconds));musicGain=musicFadeRemaining/(float)musicFadeDuration;if(musicFadeRemaining==0){audio[0]="";audioActive[0]=false;audioGeneration[0]++;musicId=-1;}}performance.elapse(milliseconds,scene,this::perform);pollAudioWait();}
     private void finishCredits(){for(Dc3Scene.Layer l:scene.slots)l.resource="";scene.slots[1].resource="BG/BLACK";scene.quads.clear();scene.published=scene.capture();}
     private void perform(Dc3Performance.Event e){
         if(e.kind==5){musicFadeDuration=musicFadeRemaining=e.value;if(e.value==0){audio[0]="";audioActive[0]=false;audioGeneration[0]++;musicId=-1;}return;}
@@ -91,6 +157,7 @@ public final class Dc3Host implements MesVm.ContextHost,MesVm.ChoiceHost,MesVm.T
     public boolean signal(long expected,MesVm.HostSignal signal)throws IOException {
         if(!waiting()||expected!=ticket)return false;
         if(ui.waiting)return false;
+        if(signal==MesVm.HostSignal.ADVANCE&&dialogue.waiting()&&dialogue.rendered()&&(followsPp()||PcHost.followsExe&&state.read(99,208)!=0))stopVoice(); // P.P. 428172 always; D.D. 433E63 if r208 says so.
         if(credits.active()){if(signal==MesVm.HostSignal.ADVANCE&&credits.skippable){credits.elapsed=credits.end();finishCredits();return true;}return false;}
         if(!movie.isEmpty()){if(signal==MesVm.HostSignal.MEDIA_COMPLETE){movie="";return true;}return false;}
         if(remaining!=0){if(signal==MesVm.HostSignal.ADVANCE&&interruptible){remaining=0;return true;}return false;}
@@ -123,7 +190,7 @@ public final class Dc3Host implements MesVm.ContextHost,MesVm.ChoiceHost,MesVm.T
     public byte[] pollMenuAction(){if(ui.waiting&&!audioActive[0]&&!musicEndAction.isEmpty()&&musicPollElapsed>500){byte[] a=musicEndAction.getBytes(Binary.SJIS);musicPollElapsed=0;ui.waiting=ui.gridWaiting=false;return a;}return null;}
     public byte[] automaticMenuAction(){byte[] action=automaticMenuAction;automaticMenuAction=null;return action;}
     public boolean hasTimedInput(){return interruptible&&remaining!=0;}
-    public byte[] menuAction(long expected,int button)throws IOException{if(!originalSystem||expected!=ticket)return null;if(!ui.waiting){return button==-1&&hasTimedInput()&&!ui.actions[3].isEmpty()?ui.actions[3].getBytes(Binary.SJIS):null;}if(button==-15)return ui.actions[15].isEmpty()?null:ui.actions[15].getBytes(Binary.SJIS);
+    public byte[] menuAction(long expected,int button)throws IOException{if(!originalSystem||expected!=ticket)return null;if(!ui.waiting){if(ui.keepsPanels&&(button==-1||button==-2)){String slot=ui.actions[button==-2?2:3];return slot.isEmpty()||slot.equals("-")?null:slot.getBytes(Binary.SJIS);} /* 433F8C: every wait honours actions 2 and 3. */return button==-1&&hasTimedInput()&&!ui.actions[3].isEmpty()?ui.actions[3].getBytes(Binary.SJIS):null;}if(button==-15)return ui.actions[15].isEmpty()?null:ui.actions[15].getBytes(Binary.SJIS);
         if(ui.activeConfirmation>=0){String action=button==-1?":n":button>=0&&button<ui.current.buttons.size()?ui.current.buttons.get(button).action:"";if(action.equals(":y")||action.equals(":n"))return ui.actions[action.equals(":y")?0:1].getBytes(Binary.SJIS);}
         if(button==-1)return ui.actions[3].isEmpty()?null:ui.actions[3].getBytes(Binary.SJIS);if(button<0||button>=ui.current.buttons.size())throw new IOException("Invalid UI button");return ui.current.buttons.get(button).actionBytes();}
     public boolean internalMenuAction(long expected,int button)throws IOException{
@@ -141,9 +208,9 @@ public final class Dc3Host implements MesVm.ContextHost,MesVm.ChoiceHost,MesVm.T
         if(ui.saveGrid&&slot<3||!ui.saveGrid&&!availableSaves.contains(slot))return null;
         state.write(99,246,2);state.write(99,253,row);state.write(99,254,slot);menuSound(ui.gridClickSound);ui.gridWaiting=ui.waiting=false;return "selsave".getBytes(Binary.SJIS);
     }
-    private void menuSound(int sound)throws IOException{if(sound!=255){audio[1]=resources.named("sound",sound);audioLoop[1]=false;audioActive[1]=true;audioGeneration[1]++;}}
-    public void acceptMenuAction(int button)throws IOException{remaining=0;if(button>=0)state.write(99,245,button);menuSound(button<0?255:ui.current.buttons.get(button).clickSound);ui.closeConfirmation();ui.waiting=false;ui.pressed=ui.hovered=-1;}
-    public void hoverMenu(int button)throws IOException{if(!ui.waiting||button==ui.hovered)return;require(button>=-1&&button<ui.current.buttons.size(),"hover button");ui.hovered=button;if(button>=0){int sound=ui.current.buttons.get(button).hoverSound;if(sound!=255){audio[1]=resources.named("sound",sound);audioLoop[1]=false;audioActive[1]=true;audioGeneration[1]++;}}}
+    private void menuSound(int sound)throws IOException{uiSound(sound);}
+    public void acceptMenuAction(int button)throws IOException{if(ui.keepsPanels&&!ui.waiting&&dialogue.waiting())dialogue.suspend();remaining=0;if(button>=0)state.write(99,245,button);menuSound(button<0?255:ui.current.buttons.get(button).clickSound);ui.closeConfirmation();ui.waiting=false;ui.pressed=ui.hovered=-1;}
+    public void hoverMenu(int button)throws IOException{if(!ui.waiting||button==ui.hovered)return;require(button>=-1&&button<ui.current.buttons.size(),"hover button");ui.hovered=button;if(button>=0){int sound=ui.current.buttons.get(button).hoverSound;uiSound(sound);}}
     private Dc3Scene.Quad uiQuad(int[] a)throws IOException{require(a.length==8,"UI quad extension");int s=slot(a[6]&63);Dc3Scene.Quad q=new Dc3Scene.Quad();q.resource=scene.pending[s]!=null?scene.pending[s]:scene.slots[s].resource;if(q.resource.isEmpty())q.resource="@slot:"+s;q.x=ui.current.x+a[0];q.y=ui.current.y+a[1];q.sx=a[2];q.sy=a[3];q.width=a[4];q.height=a[5];q.opaque=(a[6]&128)!=0;return q;}
     /** A UI quad keeps "@slot:N" when its slot was still empty at the moment it was built -
      *  a template that outlives the surface, or a panel drawn before the loader ran. The
@@ -186,8 +253,8 @@ public final class Dc3Host implements MesVm.ContextHost,MesVm.ChoiceHost,MesVm.T
         case "ui.wait":
             for(Dc3Scene.Quad q:ui.current.quads)resolveUi(q);
             for(Dc3Ui.Button b:ui.current.buttons)for(Dc3Ui.Sprite s:b.sprites)if(s.state!=5)resolveUi(s.quad);
-            publish();ui.waiting=true;nextTicket();return true;
-        case "ui.flush":require(a[0]==0||a[0]==1,"UI overlay commit");return true;
+            publish();ui.waiting=true;ui.shown=true;nextTicket();return true;
+        case "ui.flush":require(a[0]==0||a[0]==1,"UI overlay commit");if(ui.keepsPanels){for(Dc3Scene.Quad q:ui.current.quads)resolveUi(q);for(Dc3Ui.Button b:ui.current.buttons)for(Dc3Ui.Sprite s:b.sprites)if(s.state!=5)resolveUi(s.quad);ui.shown=true;}return true;
         case "ui.focus":ui.current.focus=true;return true;
         case "ui.navigation":require(a[0]>=0&&a[0]<=3,"UI navigation selector");ui.current.flags|=1<<a[0];return true;
         case "ui.navigation_extra":ui.current.flags|=16;return true;
@@ -229,6 +296,9 @@ public final class Dc3Host implements MesVm.ContextHost,MesVm.ChoiceHost,MesVm.T
         case "scene.checkpoint":checkpointLabel=text(bytes);variables.appendHistory();return true;
         case "dd.audio.seek":require(a[0]==0,"audio seek channel "+a[0]);musicRoom.seek=Math.max(0,Math.min(100,state.read(99,187)+1));musicRoom.seekGeneration++;return true;
         case "system.command":
+            if(originalSystem&&PcHost.followsExe&&a[0]==215)return true; // Past the end of every native switch: 40A3F9, 408F49, 412A36.
+            if(originalSystem&&followsPp()&&systemPp(a))return true;
+            if(originalSystem&&followsWy()&&systemWy(a))return true;
             // PP 412DD5: submode 0 selects native draw mode 4 and returns;
             // no VM/persistent state changes. Canvas owns its draw pipeline.
             if(originalSystem&&a[0]==12&&a[1]==0&&resources!=null&&resources.profile.id.equals("dc3pp-9872"))return true;
@@ -261,7 +331,7 @@ public final class Dc3Host implements MesVm.ContextHost,MesVm.ChoiceHost,MesVm.T
             case 7:skipAllowed=a[1]!=0;return true;
             default:throw new IOException("Unimplemented system.persist mode "+a[0]);
             }
-        case "wait.duration":if(a[0]==254){delay(scene.animationRemaining(),false);return true;}require(a[0]<254,"native input wait 255");delay(a[0]==0&&a[1]!=0?-1:a[0]*200L,a[1]!=0);return true;
+        case "wait.duration":if(followsPp()&&a[0]<254){waitPp(a);return true;}if(a[0]==254){delay(scene.animationRemaining(),false);return true;}require(a[0]<254,"native input wait 255");delay(a[0]==0&&a[1]!=0?-1:a[0]*200L,a[1]!=0);durationWait=PcHost.followsExe;return true;
         case "image.load":{
             int s=slot(a[0]);if(s==0)return true;
             String name=resource(text(bytes));if(name.equals("--")){require(systemScene!=null,"previous-scene image restore");name=systemScene.layers[s].resource;}
@@ -318,10 +388,13 @@ public final class Dc3Host implements MesVm.ContextHost,MesVm.ChoiceHost,MesVm.T
             scene.transition=mode;scene.transitionParameter=a[1];
             if(mode==5){publish();return true;}
             String mask="";long duration=(a[1]+1)*1000L/3;
-            if(mode==3)duration=167; // Five ticks up, five down (407CC0 / 408CCC).
+            if(followsPp()&&mode<=2)duration=fadePp(a[1]);
+            if(PcHost.followsExe&&!followsPp()&&mode<=2)duration=state.read(99,10)==0?0:fadeFrames((5L*a[1]+5)*4,state.read(99,12))*1000/60; // 42CA88
+            if(mode==3&&!followsPp())duration=PcHost.followsExe?167L*(a[1]+1):167; // Five ticks up, five down (407CC0 / 408CCC).
             if(mode==16){mask="system\\effbreak";duration=1000;}
             if(mode==17){mask=a[1]==1?"MSK\\MASK11A":"MSK\\MASK04A";scene.pending[scene.layout.mask]=mask;duration=1000;}
             if(mode==20||mode==21){int m=scene.layout.mask;mask=scene.pending[m]!=null?scene.pending[m]:scene.slots[m].resource;require(!mask.isEmpty()&&!mask.equals("-"),"transition without mask");duration=a[1]*200L;}
+            if(mode==2||mode==16||mode==17||mode==20||mode==21)ui.dropPanel();
             scene.fade.start(mode,a[1],duration,mask,scene.published);
             if(mode==2||mode==16){scene.petals.start(0);scene.fog=false;scene.clouds=false;}
             delay(scene.fade.duration,false);
@@ -344,9 +417,17 @@ public final class Dc3Host implements MesVm.ContextHost,MesVm.ChoiceHost,MesVm.T
             if(a[0]==-2){pendingAudio[5]="";return true;}
             if(a[0]==-1){for(int i=1;i<=4;i++)pendingAudio[i]="";return true;}
             require(a[0]>=0&&(a[1]==0||a[1]==1),"SE loop/control "+Arrays.toString(a));
+            if(ui.keepsPanels){int i=a[1]!=0?1:pendingAudio[2]==null&&!audioActive[2]?2:3;pendingAudio[i]=resources.named("sound",a[0]);audioLoop[i]=a[1]!=0;return true;} // 43B4C0: a loop on 1, one shots after it.
             for(int i=1;i<=4;i++)if(pendingAudio[i]==null){pendingAudio[i]=resources.named("sound",a[0]);audioLoop[i]=a[1]!=0;break;}return true;
         }
         case "audio.restore_volume":
+            if(followsPp()){ // 42C089: in P.P. this opcode is the music command.
+                if(a[1]==10||a[1]==11)return true; // 411450: the music page's repeat lamp.
+                if(a[0]==255){pendingAudio[0]="";musicId=-1;return true;}
+                int track=a[0]==254?musicId:a[0];if(track<0)return true;
+                if(a[0]!=254&&a[1]==1&&musicId==track)return true;
+                pendingAudio[0]=resources.named("music",track);audioLoop[0]=a[1]!=2;musicId=track;musicGain=1;musicFadeRemaining=0;state.write(96,track,1);return true;
+            }
             if(a[0]==254){publishAudio();return true;}
             if(a[0]==255){if(musicVolumeBackup!=0){state.write(99,7,musicVolumeBackup);musicVolumeBackup=0;}return true;}
             require(a[0]>=0&&a[0]<254,"temporary music volume");musicVolumeBackup=state.read(99,7);state.write(99,7,musicVolumeBackup*a[0]/100);return true;

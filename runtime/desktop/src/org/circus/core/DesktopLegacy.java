@@ -384,11 +384,11 @@ public final class DesktopLegacy extends DesktopEngine {
     private void at(Graphics2D g,String name,int x,int y)throws IOException {Picture p=picture(name);if(p!=null)g.drawImage(p.image,x+p.raw.x,y+p.raw.y,null);}
     private static String pcFontFamily;
     /** 40BAD4 asks for ＭＳ ゴシック at twice the height; Macs have no MS Gothic, and a Chinese font would misplace 、。 */
-    private static Font pcFont(int size){
+    static Font pcFont(int size){
         if(pcFontFamily==null){java.util.Set<String> have=new java.util.HashSet<>(Arrays.asList(GraphicsEnvironment.getLocalGraphicsEnvironment().getAvailableFontFamilyNames()));pcFontFamily="Dialog";for(String name:new String[]{"Hiragino Sans","Hiragino Kaku Gothic ProN"}){if(have.contains(name)){pcFontFamily=name;break;}}for(String name:new String[]{"MS Gothic","ＭＳ ゴシック"})if(have.contains(name))pcFontFamily=name;}
         return new Font(pcFontFamily,Font.PLAIN,size);
     }
-    private static int pcBaseline(int y,int size){return y+Math.round(size*.859f);}
+    static int pcBaseline(int y,int size){return y+Math.round(size*.859f);}
     private void pcGlyph(Graphics2D g,String c,int x,int y,int size,Color fg,Color shade){g.setFont(pcFont(size));int base=pcBaseline(y,size);if(shade!=null){g.setColor(shade);g.drawString(c,x+1,base+1);}g.setColor(fg);g.drawString(c,x,base);}
     private Color pcShade(int style){return (style&0x80)==0?null:new Color(color(followsPc2Exe()&&(style&63)==0?9:0),true);}
     /** 41C5E0: base text first, ruby over it. 41C8A6: a ruby dot is a full size ・ pulled back to mark the character. */
@@ -399,7 +399,7 @@ public final class DesktopLegacy extends DesktopEngine {
         Color fg=new Color(color(style),true),shade=pcShade(style);
         for(int pass=0;pass<2;pass++)for(PcText.Glyph c:l.glyphs){
             if(c.tick>=shown||(c.size==PcText.RUBY_SIZE)!=(pass==1))continue;
-            if(pass==1&&c.text.equals("・"))pcGlyph(g,c.text,c.x+rules.dotDx,c.y+(rules.rubyRise-PcText.RUBY_RISE)+rules.dotDy,rules.body,fg,shade);else pcGlyph(g,c.text,c.x,c.y,c.size,fg,shade);
+            if(pass==1&&c.text.equals("・"))pcGlyph(g,c.text,c.x+rules.dotDx,c.y+rules.rubyRise+rules.dotDy,rules.body,fg,shade);else pcGlyph(g,c.text,c.x,c.y,c.size,fg,shade);
         }
     }
     /** 41F7D0: 24 px cells centred on the name plate, whose template carries the centre in its zero width entry. */

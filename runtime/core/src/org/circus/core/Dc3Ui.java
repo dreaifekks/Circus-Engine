@@ -43,7 +43,7 @@ public final class Dc3Ui {
     public final List<String> voiceNames=new ArrayList<>();
     public boolean waiting;public String version="";public int hovered=-1,pressed=-1,pointerX,pointerY,messageX,messageY,inputMode;
     public Dc3Ui(){Arrays.fill(actions,"");defaultPalette(false);}
-    public void clear(){grid.clear();gridWaiting=false;current=new Panel();underlay=null;activeConfirmation=-1;waiting=false;hovered=pressed=-1;Arrays.fill(actions,"");}
+    public void clear(){shown=false;grid.clear();gridWaiting=false;current=new Panel();underlay=null;activeConfirmation=-1;waiting=false;hovered=pressed=-1;Arrays.fill(actions,"");}
     public Button last()throws IOException{if(current.buttons.isEmpty())throw new IOException("UI property without a button");return current.buttons.get(current.buttons.size()-1);}
     public void button(int[] a,String action)throws IOException{button(a,action.getBytes(Binary.SJIS));}
     public void button(int[] a,byte[] action)throws IOException{if(current.buttons.size()>=1024||action.length>255)throw new IOException("UI button limit");Button b=new Button();b.left=a[0];b.top=a[1];b.right=a[2];b.bottom=a[3];b.actionBytes=action.clone();b.action=TextCodec.cp932(action);current.buttons.add(b);}
@@ -55,9 +55,13 @@ public final class Dc3Ui {
         templates[mapping[selector]]=current;current=new Panel();hovered=pressed=-1;
     }
     public int hit(float x,float y){if(!waiting||current.hidden)return -1;for(int n=current.buttons.size()-1;n>=0;n--)if(!current.buttons.get(n).action.isEmpty()&&current.buttons.get(n).contains(x,y))return n;return -1;}
-    public List<Dc3Scene.Quad> visible(){List<Dc3Scene.Quad> out=new ArrayList<>();if(!waiting)return out;if(underlay!=null)visible(underlay,-1,-1,false,false,out);visible(current,hovered,pressed,activeConfirmation>=0,confirmChecked,out);return out;}
+    /** D.D. 4339D5, 423BCA: a click only jumps to a label; the panel stays drawn until 4203A0 takes it down. */
+    public boolean keepsPanels,shown;
+    public boolean panelUp(){return waiting||keepsPanels&&shown;}
+    public void dropPanel(){if(keepsPanels&&shown&&!waiting){current=new Panel();underlay=null;shown=false;}}
+    public List<Dc3Scene.Quad> visible(){List<Dc3Scene.Quad> out=new ArrayList<>();if(!panelUp())return out;if(underlay!=null)visible(underlay,-1,-1,false,false,out);visible(current,hovered,pressed,activeConfirmation>=0,confirmChecked,out);return out;}
     private static void visible(Panel panel,int hovered,int pressed,boolean modal,boolean checked,List<Dc3Scene.Quad> out){if(panel.hidden)return;out.addAll(panel.quads);for(int n=0;n<panel.buttons.size();n++){Button b=panel.buttons.get(n);int state=n==pressed?2:n==hovered?1:99;boolean checkbox=modal&&b.action.equals(":c");if(checkbox&&state==2)state=1;boolean found=false;for(Sprite s:b.sprites)if(s.state==state)found=true;for(Sprite s:b.sprites)if(s.state==(found?state:99)||checkbox&&checked&&s.state==2)out.add(s.quad);}}
-    public Set<String> resources(){Set<String> out=new HashSet<>();if(waiting)for(Panel p:new Panel[]{underlay,current})if(p!=null&&!p.hidden){for(Dc3Scene.Quad q:p.quads)out.add(q.resource);for(Button b:p.buttons)for(Sprite s:b.sprites)if(s.state!=5)out.add(s.quad.resource);}return out;}
+    public Set<String> resources(){Set<String> out=new HashSet<>();if(panelUp())for(Panel p:new Panel[]{underlay,current})if(p!=null&&!p.hidden){for(Dc3Scene.Quad q:p.quads)out.add(q.resource);for(Button b:p.buttons)for(Sprite s:b.sprites)if(s.state!=5)out.add(s.quad.resource);}return out;}
     static Panel copy(Panel panel)throws IOException{ByteArrayOutputStream bytes=new ByteArrayOutputStream();panel.save(new DataOutputStream(bytes));Panel result=new Panel();result.load(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray())));return result;}
     /** Native 43059A / 417E20: template 12, first backdrop and indexed caption from anonymous button. */
     public void confirmation()throws IOException{

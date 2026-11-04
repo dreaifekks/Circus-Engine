@@ -72,6 +72,8 @@ public abstract class DesktopEngine {
     public void pointerUp(int x,int y)throws Exception{if(!pointerHeld)return;boolean anywhere=keepsPointerAcrossRebuild();if(!anywhere&&pointerStale(x,y)){cancelPointer();return;}boolean activate=anywhere||sameControl(controlAt(x,y)),dragging=pointerDragging;pointerHeld=pointerDragging=false;pressed(x,y,false);if(dragging)endDrag();else if(activate)click(x,y,false);pointerControl=null;}
     public void cancelPointer(){pointerHeld=pointerDragging=false;pointerControl=null;pressed(0,0,false);cancelDrag();}
     public void scroll(int units)throws Exception{}
+    /** Function keys a game gives its own meaning; true if taken. */
+    public boolean functionKey(int code)throws Exception{return false;}
     /** Arrow and page keys, on key down so that they repeat. */
     public void navKey(int code)throws Exception{}
     /** The script a save was made in, for engines that can tell. */

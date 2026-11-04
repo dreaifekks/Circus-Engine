@@ -52,6 +52,7 @@ public final class MesVm {
     public static String scriptOf(byte[] snapshot)throws IOException{
         DataInputStream in=new DataInputStream(new ByteArrayInputStream(snapshot));in.readInt();in.readUTF();return in.readUTF();
     }
+    public boolean hasLabel(byte[] label){return script.label(label)!=null;}
     /** Host-owned jump to a label of the current script. */
     public void jump(String label)throws IOException{
         Integer target=script.label(label.getBytes(Binary.SJIS));if(target==null)throw new IOException("Label missing: "+label);pc=target;status=Status.RUNNING;

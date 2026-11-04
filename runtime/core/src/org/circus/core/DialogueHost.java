@@ -9,7 +9,7 @@ import java.util.*;
 public final class DialogueHost implements MesVm.FlowHost {
     public final TextCodec codec;
     public String familyName,givenName;
-    public boolean suppressMessageWait,skipNextMessageWait;
+    public boolean suppressMessageWait,skipNextMessageWait,spreadRubyDots;
     public String shownSpeaker="",shownText="";
     public final List<String> backlog=new ArrayList<>();
     private String speaker="",body="";
@@ -49,7 +49,7 @@ public final class DialogueHost implements MesVm.FlowHost {
         if(waiting())throw new IOException("Command while dialogue is waiting");
         switch(op){
         case "text.speaker":speaker=NativeText.plain(bytes,codec,familyName,givenName,true);return true;
-        case "text.body":body=NativeText.plain(bytes,codec,familyName,givenName,false);previousText=true;return true;
+        case "text.body":body=NativeText.plain(bytes,codec,familyName,givenName,false);if(spreadRubyDots)body=NativeText.expandRubyDots(body);previousText=true;return true;
         case "wait.message":
             if(suppressMessageWait)return true;
             if(skipNextMessageWait){skipNextMessageWait=false;return true;}

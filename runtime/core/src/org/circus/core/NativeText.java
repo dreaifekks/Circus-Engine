@@ -29,7 +29,7 @@ public final class NativeText {
         }
         String value=codec.decodeUnmapped(raw);
         // 422567 also rewrites this byte pattern; keeping it as literal text is unsafe.
-        int ruby=value.indexOf("｛・");if(ruby>=0)throw new UnsupportedControl(value.substring(0,ruby).getBytes(Binary.SJIS).length,"｛・");
+        int ruby=value.indexOf("｛・");if(ruby>=0&&!PcHost.followsExe)throw new UnsupportedControl(value.substring(0,ruby).getBytes(Binary.SJIS).length,"｛・");
         int replacements=0;
         while(true){
             int f=value.indexOf("&f"),n=value.indexOf("&n");if(f<0&&n<0)break;
@@ -42,6 +42,18 @@ public final class NativeText {
             if(value.length()>8191)throw new IOException("Expanded native text buffer limit");
         }
         return codec.apply(value);
+    }
+    /** 422567: one dot per double byte base character, so "｛・／甘｝" style marks spread over the whole word. */
+    public static String expandRubyDots(String value)throws IOException{
+        StringBuilder out=new StringBuilder();int at=0;
+        while(true){
+            int open=value.indexOf("｛・",at),slash=open<0?-1:value.indexOf('／',open),close=slash<0?-1:value.indexOf('｝',slash);
+            if(close<0){out.append(value.substring(at));return out.toString();}
+            String kana=value.substring(open+1,slash),base=value.substring(slash+1,close);
+            out.append(value,at,open+1);
+            if(kana.replace("・","").isEmpty()){int dots=(base.getBytes(Binary.SJIS).length+1)/2;for(int n=0;n<dots;n++)out.append('・');}else out.append(kana);
+            out.append(value,slash,close+1);at=close+1;
+        }
     }
     private static boolean starts(byte[] b,int at,String s){if(at+s.length()>b.length)return false;for(int i=0;i<s.length();i++)if((b[at+i]&255)!=s.charAt(i))return false;return true;}
 }
