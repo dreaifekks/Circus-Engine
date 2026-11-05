@@ -10,6 +10,8 @@ public final class Crx {
     public interface Resolver { byte[] byOffset(long offset)throws IOException; byte[] byName(byte[] name)throws IOException; }
     public static final class Image {
         public final int x,y,width,height,bpp,stride;public final byte[] pixels;public final int[] palette;
+        /** The rectangle table of a comp 3 header gives the full canvas; a difference is composed onto it (DC2PC 40404F, 40EF80). Zero otherwise. */
+        public int canvasWidth,canvasHeight;public boolean composed;
         Image(int x,int y,int w,int h,int bpp,byte[] pixels,int[] palette){this.x=x;this.y=y;width=w;height=h;this.bpp=bpp;stride=(w*(bpp/8)+3)&~3;this.pixels=pixels;this.palette=palette;}
         public int[] argb(){return argb(false);}
         /** DD's 24-bit blitters skip magenta (44C420..44C436, 44C7C2..44C7D8). */
@@ -24,7 +26,7 @@ public final class Crx {
         // GARbro's CRXD base must be CRXG; do not guess recursive base composition.
         byte[] change=diffBytes(data,resolver,new HashSet<Long>());
         // A 0x0 difference means this picture is its base unchanged: D.C.II P.C. has actors stored this way.
-        Binary.range(0,20,change.length);if(Binary.u16(change,8)==0||Binary.u16(change,10)==0)return plain(base);
+        Binary.range(0,20,change.length);if(Binary.u16(change,8)==0||Binary.u16(change,10)==0){Image same=plain(base);same.composed=true;return same;}
         Image original=plain(base),diff=plain(change);
         if(original.bpp!=diff.bpp||original.bpp==8)throw new IOException("Unsupported CRXD pixel layout");
         int left=Math.max(original.x,diff.x),top=Math.max(original.y,diff.y),right=Math.min(original.x+original.width,diff.x+diff.width),bottom=Math.min(original.y+original.height,diff.y+diff.height),ps=original.bpp/8;
@@ -33,7 +35,7 @@ public final class Crx {
             for(int c=0;c<3;c++)original.pixels[d+c]=(byte)(original.pixels[d+c]+diff.pixels[s+c]);
             if(ps==4)original.pixels[d+3]=(byte)(original.pixels[d+3]-diff.pixels[s+3]);
         }
-        return original;
+        original.composed=true;return original;
     }
     private static byte[] diffBytes(byte[] data,Resolver resolver,Set<Long> seen)throws IOException {
         if(Binary.u32(data,0)!=0x44585243L)throw new IOException("Referenced difference is not CRXD");
@@ -49,7 +51,7 @@ public final class Crx {
         if(w==0||h==0||(long)w*h>16777216L||comp<1||comp>3)throw new IOException("Invalid CRX geometry/compression");
         int bpp=depth==0?24:depth==1?32:8,ps=bpp/8,stride=(w*ps+3)&~3,p=20;int[] palette=null;
         if(bpp==8){int colors=Math.min(depth,256),entryBytes=depth==258?4:3;if(colors<=0)throw new IOException("Invalid palette");palette=new int[256];Binary.range(p,colors*entryBytes,data.length);for(int i=0;i<colors;i++){int r=data[p]&255,g=data[p+1]&255,b=data[p+2]&255;if(r==255&&g==0&&b==255)g=255;palette[i]=0xff000000|r<<16|g<<8|b;p+=entryBytes;}}
-        if(comp>=3){long count=Binary.u32(data,p);p+=4;Binary.range(p,count*16,data.length);p+=(int)(count*16);}
+        int canvasW=0,canvasH=0;if(comp>=3){long count=Binary.u32(data,p);p+=4;Binary.range(p,count*16,data.length);if(count>0){canvasW=Binary.i16(data,p+4);canvasH=Binary.i16(data,p+6);}p+=(int)(count*16);}
         if((flags&16)!=0){long size=Binary.u32(data,p);p+=4;
             // Loose W.Y./P.P. translation images put the complete file length
             // here. Original encoders put the compressed payload length here.
@@ -80,7 +82,7 @@ public final class Crx {
             if(extra!=-1||padding>3&&padding!=alignment)throw new IOException("Extra CRX decoded payload");
         }
         if(bpp==32&&mode!=1){int flip=mode==2?0:255;for(int row=0;row<h;row++)for(int col=0;col<w;col++){int q=row*stride+4*col;byte a=output[q],b=output[q+1],g=output[q+2],r=output[q+3];output[q]=b;output[q+1]=g;output[q+2]=r;output[q+3]=(byte)(a^flip);}}
-        return new Image(x,y,w,h,bpp,output,palette);
+        Image image=new Image(x,y,w,h,bpp,output,palette);image.canvasWidth=canvasW;image.canvasHeight=canvasH;return image;
     }
     private static void unpackLz(byte[] data,int p,byte[] out)throws IOException {
         byte[] window=new byte[65536];int flags=0,win=0,dst=0;

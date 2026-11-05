@@ -87,7 +87,7 @@ public class CircusResources {
             if(filter=='@'){b=b*3/4+16;g=g*3/4;r=r*3/4;}else if(generation==1){b=b*3/4;g=g*3/4;r=r*3/4+16;}else if(generation==2){b=b*3/4;g=g*3/4+16;r=r*3/4+48;}else{b=b*7/8;g=g*7/8+8;r=r*7/8+32;}
             pixels[p]=(byte)b;pixels[p+1]=(byte)g;pixels[p+2]=(byte)r;
         }
-        return new Crx.Image(source.x,source.y,source.width,source.height,source.bpp,pixels,source.palette);
+        Crx.Image tinted=new Crx.Image(source.x,source.y,source.width,source.height,source.bpp,pixels,source.palette);tinted.canvasWidth=source.canvasWidth;tinted.canvasHeight=source.canvasHeight;tinted.composed=source.composed;return tinted;
     }
     /** Some games list a sound as "se/241.wav" and store it as se/241.PCM. */
     private String withoutWave(String path){return PcHost.supports(profile)&&path.toLowerCase(Locale.ROOT).endsWith(".wav")&&!path.regionMatches(true,0,"VOICE/",0,6)?path.substring(0,path.length()-4):path;}
