@@ -1,0 +1,5 @@
+import java.io.*;import java.nio.*;import java.nio.charset.*;import java.util.zip.*;
+public class CharsetTables{public static void main(String[] a)throws Exception{Charset cs=Charset.forName(a[0]);char[] dec=new char[65536];
+ for(int i=0;i<65536;i++){byte[] b=i<256?new byte[]{(byte)i}:new byte[]{(byte)(i>>8),(byte)i};CharsetDecoder d=cs.newDecoder().onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT);try{CharBuffer c=d.decode(ByteBuffer.wrap(b));dec[i]=c.remaining()==1?c.get(0):0xFFFD;}catch(CharacterCodingException e){dec[i]=0xFFFD;}}
+ char[] enc=new char[65536];for(int i=0;i<65536;i++){if(i>=0xD800&&i<0xE000)continue;CharsetEncoder e=cs.newEncoder();try{ByteBuffer b=e.encode(CharBuffer.wrap(new char[]{(char)i}));enc[i]=(char)(b.remaining()==1?b.get(0)&255:((b.get(0)&255)<<8|(b.get(1)&255)));}catch(CharacterCodingException x){enc[i]=0;}}
+ try(DataOutputStream o=new DataOutputStream(new GZIPOutputStream(new FileOutputStream(a[1])))){for(char c:dec)o.writeChar(c);for(char c:enc)o.writeChar(c);}}}

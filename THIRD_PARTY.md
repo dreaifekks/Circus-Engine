@@ -53,6 +53,13 @@ IN THE SOFTWARE.
 
 ## PL_MPEG
 
+The vendored `runtime/native/third_party/stb_vorbis.c` decodes Ogg Vorbis in the iPad
+host. Source: https://github.com/nothings/stb, v1.22, by Sean Barrett, retrieved
+2026-11-05. It offers MIT or public domain terms and is used here under either.
+
+The iPad host is compiled by MobiVM (https://github.com/MobiVM/robovm), fetched by
+Maven at build time and not vendored. Its compiler is GPL-2.0, its runtime Apache-2.0.
+
 The vendored `runtime/native/third_party/pl_mpeg.h` provides MPEG-1 video and
 MPEG Layer II audio decoding. Source: https://github.com/phoboslab/pl_mpeg,
 upstream Git blob `b42f53f89f868a697435ab1e15742f370819ffbc`, retrieved 2026-10-26.

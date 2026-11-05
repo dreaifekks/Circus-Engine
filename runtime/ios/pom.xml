@@ -1,0 +1,14 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"><modelVersion>4.0.0</modelVersion>
+<groupId>org.circus</groupId><artifactId>dc-runtime-ios</artifactId><version>0.1</version>
+<properties><robovm.version>3.0.0</robovm.version><maven.compiler.source>8</maven.compiler.source><maven.compiler.target>8</maven.compiler.target><project.build.sourceEncoding>UTF-8</project.build.sourceEncoding></properties>
+<dependencies>
+<dependency><groupId>com.mobidevelop.robovm</groupId><artifactId>robovm-rt</artifactId><version>${robovm.version}</version></dependency>
+<dependency><groupId>com.mobidevelop.robovm</groupId><artifactId>robovm-objc</artifactId><version>${robovm.version}</version></dependency>
+<dependency><groupId>com.mobidevelop.robovm</groupId><artifactId>robovm-cocoatouch</artifactId><version>${robovm.version}</version></dependency>
+</dependencies>
+<build><sourceDirectory>${ios.src}</sourceDirectory><resources><resource><directory>resources</directory></resource></resources>
+<plugins>
+<plugin><groupId>org.codehaus.mojo</groupId><artifactId>build-helper-maven-plugin</artifactId><version>3.6.0</version><executions><execution><phase>generate-sources</phase><goals><goal>add-source</goal></goals><configuration><sources><source>coresrc</source><source>macsrc</source></sources></configuration></execution></executions></plugin>
+<plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><version>3.13.0</version><configuration></configuration></plugin>
+<plugin><groupId>com.mobidevelop.robovm</groupId><artifactId>robovm-maven-plugin</artifactId><version>${robovm.version}</version></plugin>
+</plugins></build></project>
