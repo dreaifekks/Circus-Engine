@@ -56,7 +56,7 @@ SAF 只申请读取权限；存档和解码缓存写应用私有目录。
 ### iPad
 
 ```sh
-python3 tools/package_ios.py --team TEAMID --device UDID --install --game "/path/to/DC2PC"
+python3 tools/package_ios.py --team TEAMID --game "/path/to/DC2PC" --device UDID --install --copy-game
 ```
 
 用 MobiVM 把 Mac 运行时编译成原生代码，目前只测过 iPad 8 上的 DC2PC。触摸手势和构建方式见 [iPad 说明](docs/IOS.md)。

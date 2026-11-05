@@ -1,12 +1,13 @@
 """Build the iPad app for one Apple developer team, with no game data, and optionally install it.
 
-  python3 tools/package_ios.py --team TEAMID --device UDID --install
-  python3 tools/package_ios.py --team TEAMID --device UDID --install --game DIR    also copies the game over
+  python3 tools/package_ios.py --team TEAMID --game DIR --device UDID --install               name and icon from the game
+  python3 tools/package_ios.py --team TEAMID --game DIR --device UDID --install --copy-game   also copies the game over
 
 The app runs the Mac runtime: runtime/core and DesktopLegacy are compiled unchanged by MobiVM, with AWT, Java Sound
 and Swing replaced by runtime/ios. Needs Xcode, Maven, and a device registered with the team. See docs/IOS.md.
 """
 import argparse
+import json
 import os
 from pathlib import Path
 import plistlib
@@ -16,6 +17,7 @@ import subprocess
 import tempfile
 
 from build_desktop import ROOT
+from game_identity import describe
 from package_macos import JDK, unpack
 
 WORK = ROOT / 'build/ios'
@@ -89,11 +91,35 @@ def native():
     run('libtool', '-static', '-o', out / 'libcircus.a', *objects, stderr=subprocess.DEVNULL)
 
 
-def project(name, bundle):
+def icon(source):
+    """Compile an image sips can read into Assets.car, and return its Info.plist keys. iOS fills transparency with black."""
+    base = WORK / 'icon'
+    shutil.rmtree(base, ignore_errors=True)
+    catalog = base / 'Assets.xcassets/AppIcon.appiconset'
+    catalog.mkdir(parents=True)
+    png, flat = base / 'source.png', base / 'flat.jpg'
+    for command in (['-s', 'format', 'png', source, '--out', png],
+                    ['-s', 'format', 'jpeg', '-s', 'formatOptions', '100', png, '--out', flat],
+                    ['-s', 'format', 'png', '-z', '1024', '1024', flat, '--out', catalog / 'icon.png']):
+        run('sips', *command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    (catalog / 'Contents.json').write_text(json.dumps({'images': [{'filename': 'icon.png', 'idiom': 'universal', 'platform': 'ios', 'size': '1024x1024'}],
+                                                       'info': {'author': 'xcode', 'version': 1}}))
+    (base / 'Assets.xcassets/Contents.json').write_text(json.dumps({'info': {'author': 'xcode', 'version': 1}}))
+    partial = base / 'partial.plist'
+    run('xcrun', 'actool', base / 'Assets.xcassets', '--compile', WORK / 'resources', '--platform', 'iphoneos', '--minimum-deployment-target', '15.0',
+        '--app-icon', 'AppIcon', '--target-device', 'ipad', '--target-device', 'iphone', '--output-partial-info-plist', partial, stdout=subprocess.DEVNULL)
+    return plistlib.loads(partial.read_bytes())
+
+
+def project(name, bundle, extra):
     shutil.copy(IOS / 'pom.xml', WORK / 'pom.xml')
     shutil.copy(IOS / 'robovm.xml', WORK / 'robovm.xml')
-    text = (IOS / 'Info.plist.xml').read_text(encoding='utf-8')
-    (WORK / 'Info.plist.xml').write_text(text.replace('@NAME@', name).replace('@BUNDLE@', bundle), encoding='utf-8')
+    text = (IOS / 'Info.plist.xml').read_text(encoding='utf-8').replace('@NAME@', name).replace('@BUNDLE@', bundle)
+    if extra:
+        keys = plistlib.dumps(extra).decode('utf-8')
+        keys = keys[keys.index('<dict>') + len('<dict>'):keys.rindex('</dict>')]
+        text = text[:text.rindex('</dict>')] + keys + text[text.rindex('</dict>'):]
+    (WORK / 'Info.plist.xml').write_text(text, encoding='utf-8')
 
 
 def compile_app(java_home):
@@ -156,25 +182,35 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--team', required=True, help='Apple developer team ID')
     parser.add_argument('--bundle-id', default='org.circus.dcruntime', help='changing it starts a new app, with no game or saves')
-    parser.add_argument('--name', default='DC Runtime', help='name under the icon')
+    parser.add_argument('--game', type=Path, help='game directory that supplies the name and icon')
+    parser.add_argument('--name', help='name under the icon; defaults to the name of the game')
+    parser.add_argument('--icon', type=Path, help="any image sips can read; defaults to the icon in the game's exe")
     parser.add_argument('--device', help='device UDID, from xcrun devicectl list devices')
     parser.add_argument('--install', action='store_true', help='install on --device')
-    parser.add_argument('--game', type=Path, help='game directory to copy into the app on --device')
+    parser.add_argument('--copy-game', action='store_true', help='copy --game into the app on --device, about 4 GB')
     args = parser.parse_args()
-    if (args.install or args.game) and not args.device:
-        parser.error('--install and --game need --device')
+    if (args.install or args.copy_game) and not args.device:
+        parser.error('--install and --copy-game need --device')
+    if args.copy_game and not args.game:
+        parser.error('--copy-game needs --game')
+    identity = describe(args.game) if args.game else None
     WORK.mkdir(parents=True, exist_ok=True)
     home = unpack(*JDK) / 'Contents/Home'
     sources()
     resources(home / 'bin/java')
     native()
-    project(args.name, args.bundle_id)
+    source = args.icon
+    if source is None and identity and identity.icon:
+        source = WORK / 'game-icon.ico'
+        source.write_bytes(identity.icon)
+    extra = icon(source) if source else {}
+    project(args.name or (identity.name if identity else 'DC Runtime'), args.bundle_id, extra)
     app = sign(compile_app(home), args.team, args.bundle_id)
     print(app)
     if args.install:
         install(app, args.device)
         print('installed on', args.device)
-    if args.game:
+    if args.copy_game:
         run('xcrun', 'devicectl', 'device', 'copy', 'to', '--device', args.device, '--domain-type', 'appDataContainer',
             '--domain-identifier', args.bundle_id, '--source', args.game, '--destination', f'Documents/{args.game.name}')
         print('copied', args.game)

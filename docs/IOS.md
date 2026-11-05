@@ -3,10 +3,10 @@
 `tools/package_ios.py` builds an iPad app that runs the Mac runtime. Tested on an iPad 8 with iPadOS 26.7.2, and only with DC2PC.
 
 ```sh
-python3 tools/package_ios.py --team TEAMID --device UDID --install --game "/path/to/DC2PC"
+python3 tools/package_ios.py --team TEAMID --game "/path/to/DC2PC" --device UDID --install --copy-game
 ```
 
-`--game` copies the game into the app, about 4 GB. Without it, put a folder containing `AdvData` in the app's Documents from Finder or Files. Find the UDID with `xcrun devicectl list devices`. The device must be registered with the team, have Developer Mode on, and be unlocked. A personal team's app stops opening after seven days.
+`--game` gives the app the name and icon from the game's exe, as on the Mac. `--copy-game` copies the game into the app, about 4 GB. Without it, put a folder containing `AdvData` in the app's Documents from Finder or Files. Find the UDID with `xcrun devicectl list devices`. The device must be registered with the team, have Developer Mode on, and be unlocked. A personal team's app stops opening after seven days.
 
 ## Touch
 
@@ -36,7 +36,6 @@ Only `DesktopLegacy` is connected, so the games on `DesktopDd` and `DesktopUnity
 
 - A keyboard for `editingText()`, in case a game's name entry needs one.
 - Function keys and the Mac menu commands. The game's own toolbar covers saving and loading.
-- Icons. The app uses the default one.
 
 ## Checking without touching it
 
